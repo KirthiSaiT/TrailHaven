@@ -1,3 +1,4 @@
+// src/app/maps/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -24,33 +25,45 @@ const Popup = dynamic(
   { ssr: false }
 );
 
-// Import Leaflet CSS
-const MapComponent = () => {
+const MapComponent = ({ userPosition }) => {
   useEffect(() => {
     import('leaflet/dist/leaflet.css');
     import('leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css');
     import('leaflet-defaulticon-compatibility');
   }, []);
 
-  // Map center (Chennai, Tamil Nadu)
-  const mapCenter = [13.0827, 80.2707]; // Latitude, Longitude
-  const markerPosition = [13.0737, 80.2075]; // Kolathur, Chennai
+  // Default map center (Chennai, Tamil Nadu) if user location is not available
+  const defaultCenter = [13.0827, 80.2707]; // Latitude, Longitude
+
+  // Create a custom red marker icon
+  const L = require('leaflet');
+  const redIcon = new L.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
 
   return (
-    <div className="absolute inset-0" style={{ height: "100%", width: "100%" }}>
+    <div className="absolute inset-0" style={{ height: '100%', width: '100%' }}>
       <MapContainer
-        center={mapCenter}
+        center={userPosition || defaultCenter}
         zoom={12}
-        style={{ height: "100%", width: "100%", zIndex: 10 }}
+        style={{ height: '100%', width: '100%', zIndex: 10 }}
         className="leaflet-map-container"
+        key={userPosition ? userPosition.join(',') : 'default'} // Force re-render when userPosition changes
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
-        <Marker position={markerPosition}>
-          <Popup>Kolathur, Chennai, Tamil Nadu</Popup>
-        </Marker>
+        {userPosition && (
+          <Marker position={userPosition} icon={redIcon}>
+            <Popup>Your current location</Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );
@@ -64,10 +77,50 @@ export default function Maps() {
   const [isRouteCardOpen, setIsRouteCardOpen] = useState(false);
   // State to handle map loading
   const [mapLoaded, setMapLoaded] = useState(false);
+  // State to store user's current position
+  const [userPosition, setUserPosition] = useState(null);
 
   useEffect(() => {
     // Set map as loaded after component mounts
     setMapLoaded(true);
+
+    // Handle geolocation
+    if (navigator.geolocation) {
+      // Initial position fetch
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserPosition([latitude, longitude]);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setUserPosition([13.0827, 80.2707]); // Fallback to default center (Chennai)
+          alert('Unable to retrieve your location. Using default location (Chennai).');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+
+      // Continuously watch for position updates
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setUserPosition([latitude, longitude]);
+        },
+        (error) => {
+          console.error('Geolocation watch error:', error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+
+      // Cleanup: Stop watching position when component unmounts
+      return () => {
+        navigator.geolocation.clearWatch(watchId);
+      };
+    } else {
+      console.error('Geolocation is not supported by this browser.');
+      setUserPosition([13.0827, 80.2707]); // Fallback to default center (Chennai)
+      alert('Geolocation is not supported by your browser. Using default location (Chennai).');
+    }
   }, []);
 
   // Animation variants for Framer Motion (for the route card pop-up)
@@ -84,7 +137,7 @@ export default function Maps() {
 
       {/* Full-Screen Map Container */}
       <div className="absolute inset-0 mt-16 z-10">
-        {mapLoaded && <MapComponent />}
+        {mapLoaded && <MapComponent userPosition={userPosition} />}
       </div>
 
       {/* Button to Toggle Route Card (Top Right) */}
@@ -171,10 +224,12 @@ export default function Maps() {
               </div>
             </div>
 
-            {/* Example Location (Kolathur, Chennai) */}
-            <div className="mt-4 p-2 bg-gray-800 rounded-lg">
-              <p className="text-sm">Kolathur, Chennai, Tamil Nadu</p>
-            </div>
+            {/* User's Current Location */}
+            {userPosition && (
+              <div className="mt-4 p-2 bg-gray-800 rounded-lg">
+                <p className="text-sm">Your current location: {userPosition[0].toFixed(4)}, {userPosition[1].toFixed(4)}</p>
+              </div>
+            )}
 
             {/* Button to Find Route */}
             <button className="w-full mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-full text-lg font-semibold transition-all">

@@ -11,36 +11,61 @@ export default function AuthCard({ onClose }) {
     email: '',
     password: '',
     policeId: '',
-    idPicture: ''
+    idPicture: null
   });
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    setMessage('');
+    setLoading(true);
+
     const url = `http://localhost:5000/api/auth/${isRegister ? 'register' : 'login'}`;
-    const body = role === 'admin' && isRegister 
-      ? formData 
-      : { email: formData.email, password: formData.password };
+    const formDataToSend = new FormData();
+    formDataToSend.append('email', formData.email);
+    formDataToSend.append('password', formData.password);
+    if (role === 'admin' && isRegister) {
+      formDataToSend.append('role', role);
+      formDataToSend.append('policeId', formData.policeId);
+      if (formData.idPicture) {
+        formDataToSend.append('idPicture', formData.idPicture);
+      }
+    }
 
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: isRegister ? formDataToSend : JSON.stringify({ email: formData.email, password: formData.password }),
+        headers: isRegister ? {} : { 'Content-Type': 'application/json' }
       });
-      
+
       const data = await res.json();
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('role', data.role);
-        onClose();
-        window.location.reload();
+      if (res.ok) {
+        if (isRegister) {
+          setMessage('Registration successful! Please log in.');
+          setIsRegister(false);
+          setFormData({ email: '', password: '', policeId: '', idPicture: null });
+        } else {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('role', data.role);
+          if (data.role === 'admin') {
+            console.log('Admin login successful');
+            localStorage.setItem('adminLoginSuccess', 'true');
+          } else {
+            localStorage.setItem('adminLoginSuccess', 'false');
+          }
+          onClose();
+          window.location.reload();
+        }
       } else {
-        alert(data.message);
+        setMessage(data.message || 'An error occurred');
       }
     } catch (error) {
       console.error('Auth error:', error);
-      alert('An error occurred');
+      setMessage('An error occurred. Please try again later.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -56,6 +81,12 @@ export default function AuthCard({ onClose }) {
           {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
         
+        {message && (
+          <div className={`mb-4 p-2 rounded-lg ${message.includes('successful') ? 'bg-green-600' : 'bg-red-600'} text-gray-100`}>
+            {message}
+          </div>
+        )}
+
         <div className="mb-6 flex justify-center space-x-4">
           <button 
             onClick={() => setRole('user')} 
@@ -64,6 +95,7 @@ export default function AuthCard({ onClose }) {
                 ? 'bg-indigo-600 text-gray-100 shadow-md' 
                 : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
             }`}
+            disabled={loading}
           >
             User
           </button>
@@ -74,6 +106,7 @@ export default function AuthCard({ onClose }) {
                 ? 'bg-indigo-600 text-gray-100 shadow-md' 
                 : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
             }`}
+            disabled={loading}
           >
             Admin
           </button>
@@ -88,6 +121,7 @@ export default function AuthCard({ onClose }) {
               value={formData.email}
               onChange={(e) => setFormData({...formData, email: e.target.value})}
               required
+              disabled={loading}
             />
           </div>
           <div className="mb-4">
@@ -98,6 +132,7 @@ export default function AuthCard({ onClose }) {
               value={formData.password}
               onChange={(e) => setFormData({...formData, password: e.target.value})}
               required
+              disabled={loading}
             />
           </div>
           
@@ -111,16 +146,17 @@ export default function AuthCard({ onClose }) {
                   value={formData.policeId}
                   onChange={(e) => setFormData({...formData, policeId: e.target.value})}
                   required
+                  disabled={loading}
                 />
               </div>
               <div className="mb-4">
                 <input
-                  type="text"
-                  placeholder="ID Picture URL"
-                  className="w-full p-3 bg-gray-700 text-gray-100 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300 placeholder-gray-400"
-                  value={formData.idPicture}
-                  onChange={(e) => setFormData({...formData, idPicture: e.target.value})}
+                  type="file"
+                  accept="image/*"
+                  className="w-full p-3 bg-gray-700 text-gray-100 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+                  onChange={(e) => setFormData({...formData, idPicture: e.target.files[0]})}
                   required
+                  disabled={loading}
                 />
               </div>
             </>
@@ -128,9 +164,12 @@ export default function AuthCard({ onClose }) {
 
           <button 
             type="submit" 
-            className="w-full bg-indigo-600 text-gray-100 p-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg"
+            className={`w-full bg-indigo-600 text-gray-100 p-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg ${
+              loading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+            disabled={loading}
           >
-            {isRegister ? 'Register' : 'Login'}
+            {loading ? 'Processing...' : isRegister ? 'Register' : 'Login'}
           </button>
         </form>
 
@@ -138,12 +177,14 @@ export default function AuthCard({ onClose }) {
           <button 
             onClick={() => setIsRegister(!isRegister)}
             className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors duration-300"
+            disabled={loading}
           >
             {isRegister ? 'Already have an account? Login' : 'Need an account? Register'}
           </button>
           <button 
             onClick={onClose}
             className="text-gray-400 hover:text-gray-300 font-medium transition-colors duration-300"
+            disabled={loading}
           >
             Close
           </button>
