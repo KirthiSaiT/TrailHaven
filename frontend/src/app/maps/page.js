@@ -26,34 +26,48 @@ const Popup = dynamic(
 );
 
 const MapComponent = ({ userPosition }) => {
+  // Move L import inside the useEffect to ensure it only runs client-side
+  const [L, setL] = useState(null);
+  const [redIcon, setRedIcon] = useState(null);
+
   useEffect(() => {
+    // Import leaflet only on client side
     import('leaflet/dist/leaflet.css');
     import('leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css');
     import('leaflet-defaulticon-compatibility');
+    
+    // Set L for use with marker icon
+    const leaflet = require('leaflet');
+    setL(leaflet);
+    
+    // Create custom red marker icon
+    const icon = new leaflet.Icon({
+      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+    setRedIcon(icon);
   }, []);
 
   // Default map center (Chennai, Tamil Nadu) if user location is not available
   const defaultCenter = [13.0827, 80.2707]; // Latitude, Longitude
 
-  // Create a custom red marker icon
-  const L = require('leaflet');
-  const redIcon = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  });
+  // Make sure we have the user's position and the Leaflet library loaded before rendering
+  if (!L || !redIcon) {
+    return <div className="flex items-center justify-center h-full">Loading map resources...</div>;
+  }
 
   return (
     <div className="absolute inset-0" style={{ height: '100%', width: '100%' }}>
       <MapContainer
         center={userPosition || defaultCenter}
-        zoom={12}
+        zoom={userPosition ? 15 : 12} // Closer zoom when user position is available
         style={{ height: '100%', width: '100%', zIndex: 10 }}
         className="leaflet-map-container"
-        key={userPosition ? userPosition.join(',') : 'default'} // Force re-render when userPosition changes
+        key={userPosition ? `user-${userPosition[0]}-${userPosition[1]}` : 'default'} // Force re-render when userPosition changes
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -61,7 +75,11 @@ const MapComponent = ({ userPosition }) => {
         />
         {userPosition && (
           <Marker position={userPosition} icon={redIcon}>
-            <Popup>Your current location</Popup>
+            <Popup>
+              Your current location<br/>
+              Latitude: {userPosition[0].toFixed(6)}<br/>
+              Longitude: {userPosition[1].toFixed(6)}
+            </Popup>
           </Marker>
         )}
       </MapContainer>
@@ -79,6 +97,8 @@ export default function Maps() {
   const [mapLoaded, setMapLoaded] = useState(false);
   // State to store user's current position
   const [userPosition, setUserPosition] = useState(null);
+  // State to track if geolocation is available
+  const [geoAvailable, setGeoAvailable] = useState(true);
 
   useEffect(() => {
     // Set map as loaded after component mounts
@@ -86,19 +106,31 @@ export default function Maps() {
 
     // Handle geolocation
     if (navigator.geolocation) {
-      // Initial position fetch
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+      // Initial position fetch with loading indicator
+      const positionPromise = new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        });
+      });
+
+      // Show loading indicator while getting position
+      positionPromise
+        .then((position) => {
           const { latitude, longitude } = position.coords;
           setUserPosition([latitude, longitude]);
-        },
-        (error) => {
+          console.log("User position found:", latitude, longitude);
+          
+          // Auto-fill starting point with user's current location
+          setStartPoint("My Current Location");
+        })
+        .catch((error) => {
           console.error('Geolocation error:', error);
+          setGeoAvailable(false);
           setUserPosition([13.0827, 80.2707]); // Fallback to default center (Chennai)
           alert('Unable to retrieve your location. Using default location (Chennai).');
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
+        });
 
       // Continuously watch for position updates
       const watchId = navigator.geolocation.watchPosition(
@@ -118,10 +150,20 @@ export default function Maps() {
       };
     } else {
       console.error('Geolocation is not supported by this browser.');
+      setGeoAvailable(false);
       setUserPosition([13.0827, 80.2707]); // Fallback to default center (Chennai)
       alert('Geolocation is not supported by your browser. Using default location (Chennai).');
     }
   }, []);
+
+  // Handler to use current location as starting point
+  const useCurrentLocationAsStart = () => {
+    if (userPosition) {
+      setStartPoint("My Current Location");
+    } else {
+      alert("Unable to get your current location. Please enable location services.");
+    }
+  };
 
   // Animation variants for Framer Motion (for the route card pop-up)
   const cardVariants = {
@@ -147,6 +189,13 @@ export default function Maps() {
       >
         {isRouteCardOpen ? 'Close' : 'Plan Route'}
       </button>
+
+      {/* User Location Status Indicator */}
+      {!geoAvailable && (
+        <div className="fixed top-20 left-4 z-50 px-4 py-2 bg-red-600 rounded-lg text-sm">
+          Location services disabled
+        </div>
+      )}
 
       {/* Route Card Pop-Up */}
       <AnimatePresence>
@@ -202,9 +251,13 @@ export default function Maps() {
                 />
               </div>
               <div className="flex justify-end">
-                <button className="p-2">
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V8m0 0l-4 4m4-4l4 4m6-8v12m0 0l-4-4m4 4l4-4"></path>
+                <button 
+                  className="p-2 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors"
+                  onClick={useCurrentLocationAsStart}
+                >
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
                   </svg>
                 </button>
               </div>
@@ -226,8 +279,13 @@ export default function Maps() {
 
             {/* User's Current Location */}
             {userPosition && (
-              <div className="mt-4 p-2 bg-gray-800 rounded-lg">
-                <p className="text-sm">Your current location: {userPosition[0].toFixed(4)}, {userPosition[1].toFixed(4)}</p>
+              <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+                <p className="text-sm flex items-center">
+                  <svg className="w-4 h-4 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"></path>
+                  </svg>
+                  Location: {userPosition[0].toFixed(4)}, {userPosition[1].toFixed(4)}
+                </p>
               </div>
             )}
 

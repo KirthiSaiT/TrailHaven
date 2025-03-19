@@ -10,27 +10,21 @@ export default function Navbar() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(null);
-  const [adminLoginSuccess, setAdminLoginSuccess] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    const adminSuccess = localStorage.getItem('adminLoginSuccess') === 'true';
-
     if (token) {
       setIsLoggedIn(true);
       setUserRole(role);
-      setAdminLoginSuccess(adminSuccess);
     }
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
-    localStorage.removeItem('adminLoginSuccess'); // Clear the flag on logout
     setIsLoggedIn(false);
     setUserRole(null);
-    setAdminLoginSuccess(false);
   };
 
   return (
@@ -58,9 +52,11 @@ export default function Navbar() {
                 <Link href="/contact" className="text-white hover:text-gray-300 transition">
                   Contact Us
                 </Link>
-                {userRole === 'admin' && adminLoginSuccess && (
-                  <Link href="/admin/dashboard" className="text-white hover:text-gray-300 transition">
-                    Dashboard
+                {userRole === 'admin' && (
+                  <Link href="/admin/dashboard">
+                    <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-full text-white font-semibold transition">
+                      Dashboard
+                    </button>
                   </Link>
                 )}
                 <button 
