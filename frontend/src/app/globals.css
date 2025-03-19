@@ -18,7 +18,6 @@
     --foreground: #ededed;
   }
 }
-/* globals.css */
 html {
   scroll-behavior: smooth;
 }
@@ -28,8 +27,51 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   background-color: #1a202c;
   color: white;
+  overflow-x: hidden;
 }
 
 a {
   text-decoration: none;
+}
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  position: relative;
+}
+
+.leaflet-map-container {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Fix popup styles for better readability */
+.leaflet-popup-content-wrapper {
+  background-color: rgba(30, 41, 59, 0.9);
+  color: white;
+  border-radius: 8px;
+}
+
+.leaflet-popup-tip {
+  background-color: rgba(30, 41, 59, 0.9);
+}
+
+/* Make sure controls are visible */
+.leaflet-control-zoom {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+.leaflet-control-zoom a {
+  color: white !important;
+}
+
+/* Fix for Safari and iOS */
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+  border: 2px solid rgba(255, 255, 255, 0.2) !important;
 }
