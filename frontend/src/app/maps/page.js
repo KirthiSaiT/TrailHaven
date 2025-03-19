@@ -1,8 +1,8 @@
 // src/app/maps/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import Navbar from '../../components/Navbar';
 
@@ -15,12 +15,16 @@ const TileLayer = dynamic(
   () => import('react-leaflet').then((mod) => mod.TileLayer),
   { ssr: false }
 );
-const Circle = dynamic(
-  () => import('react-leaflet').then((mod) => mod.Circle),
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
   { ssr: false }
 );
 const Popup = dynamic(
   () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+);
+const Circle = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Circle),
   { ssr: false }
 );
 
@@ -153,65 +157,139 @@ const dangerAreas = {
   ],
 };
 
-const MapComponent = () => {
+const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoints, startLocation, endLocation, setRouteInfo, travelMode }) => {
   const [isMounted, setIsMounted] = useState(false);
+  const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [leafletInstance, setLeafletInstance] = useState(null);
 
+  // Load Leaflet and its dependencies
   useEffect(() => {
-    // Load Leaflet CSS and confirm mounting
-    Promise.all([
-      import('leaflet/dist/leaflet.css'),
-      import('leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css'),
-      import('leaflet-defaulticon-compatibility'),
-      import('leaflet-routing-machine/dist/leaflet-routing-machine.css'),
-    ]).then(() => {
-      setIsMounted(true);
-    });
+    if (typeof window !== 'undefined') {
+      Promise.all([
+        import('leaflet'),
+        import('leaflet/dist/leaflet.css'),
+        import('leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css'),
+        import('leaflet-defaulticon-compatibility'),
+        import('leaflet-routing-machine/dist/leaflet-routing-machine.css'),
+      ])
+        .then(([L]) => {
+          setLeafletInstance(L); // Store the Leaflet instance
+          setLeafletLoaded(true);
+          setIsMounted(true);
+        })
+        .catch((error) => {
+          console.error('Failed to load Leaflet dependencies:', error);
+        });
+    }
   }, []);
 
-  if (!isMounted) return null;
+  // Default center (e.g., Chennai) if user position is not available
+  const defaultCenter = [13.0827, 80.2707]; // Coordinates for Chennai
+  const initialZoom = 12;
+
+  // Only render the map if both the component is mounted and Leaflet is loaded
+  if (!isMounted || !leafletLoaded || !leafletInstance) {
+    return <div>Loading map...</div>;
+  }
+
+  // Create custom marker icon for user's location using the loaded Leaflet instance
+  const redIcon = new leafletInstance.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
 
   return (
-    <>
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      />
-      {/* Render danger areas using react-leaflet's Circle component */}
-      {dangerAreas.highCrime.map((area, index) => (
-        <Circle
-          key={`highCrime-${index}`}
-          center={area.coords}
-          radius={area.radius}
-          pathOptions={{ color: '#FF6B6B', fillColor: '#FF6B6B', fillOpacity: 0.2 }}
-        >
-          <Popup>High Crime Area: {area.name}</Popup>
-        </Circle>
-      ))}
-      {dangerAreas.floodProne.map((area, index) => (
-        <Circle
-          key={`floodProne-${index}`}
-          center={area.coords}
-          radius={area.radius}
-          pathOptions={{ color: '#4D96FF', fillColor: '#4D96FF', fillOpacity: 0.2 }}
-        >
-          <Popup>Flood-Prone Area: {area.name}</Popup>
-        </Circle>
-      ))}
-      {dangerAreas.heavyTraffic.map((area, index) => (
-        <Circle
-          key={`heavyTraffic-${index}`}
-          center={area.coords}
-          radius={area.radius}
-          pathOptions={{ color: '#FFD166', fillColor: '#FFD166', fillOpacity: 0.2 }}
-        >
-          <Popup>Heavy Traffic Area: {area.name}</Popup>
-        </Circle>
-      ))}
-    </>
+    <div className="absolute inset-0" style={{ height: '100%', width: '100%' }}>
+      <MapContainer
+        center={userPosition || defaultCenter}
+        zoom={initialZoom}
+        style={{ height: '100%', width: '100%', zIndex: 10 }}
+        className="leaflet-map-container"
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        />
+
+        {/* User's current location marker */}
+        {userPosition && (
+          <Marker position={userPosition} icon={redIcon}>
+            <Popup>
+              <div>
+                <strong>Your Current Location</strong>
+                <br />
+                Lat: {userPosition[0].toFixed(6)}
+                <br />
+                Lng: {userPosition[1].toFixed(6)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Render danger areas using react-leaflet's Circle component */}
+        {dangerAreas.highCrime.map((area, index) => (
+          <Circle
+            key={`highCrime-${index}`}
+            center={area.coords}
+            radius={area.radius}
+            pathOptions={{ color: '#FF6B6B', fillColor: '#FF6B6B', fillOpacity: 0.2 }}
+          >
+            <Popup>High Crime Area: {area.name}</Popup>
+          </Circle>
+        ))}
+        {dangerAreas.floodProne.map((area, index) => (
+          <Circle
+            key={`floodProne-${index}`}
+            center={area.coords}
+            radius={area.radius}
+            pathOptions={{ color: '#4D96FF', fillColor: '#4D96FF', fillOpacity: 0.2 }}
+          >
+            <Popup>Flood-Prone Area: {area.name}</Popup>
+          </Circle>
+        ))}
+        {dangerAreas.heavyTraffic.map((area, index) => (
+          <Circle
+            key={`heavyTraffic-${index}`}
+            center={area.coords}
+            radius={area.radius}
+            pathOptions={{ color: '#FFD166', fillColor: '#FFD166', fillOpacity: 0.2 }}
+          >
+            <Popup>Heavy Traffic Area: {area.name}</Popup>
+          </Circle>
+        ))}
+
+        {/* Render routes */}
+        {shortestRouteWaypoints.length > 0 && (
+          <RoutingMachine
+            waypoints={shortestRouteWaypoints}
+            color="#0078A8"
+            startLocation={startLocation}
+            endLocation={endLocation}
+            setRouteInfo={setRouteInfo}
+            travelMode={travelMode}
+          />
+        )}
+        {secureRouteWaypoints.length > 0 && (
+          <RoutingMachine
+            waypoints={secureRouteWaypoints}
+            color="#4CAF50"
+            startLocation={startLocation}
+            endLocation={endLocation}
+            setRouteInfo={setRouteInfo}
+            travelMode={travelMode}
+          />
+        )}
+      </MapContainer>
+    </div>
   );
 };
 
 export default function Maps() {
+  // State for starting point and destination
   const [startLocation, setStartLocation] = useState('Chennai Central');
   const [endLocation, setEndLocation] = useState('Chennai Airport');
   const [travelMode, setTravelMode] = useState('car');
@@ -227,8 +305,104 @@ export default function Maps() {
   const [secureRouteWaypoints, setSecureRouteWaypoints] = useState([]);
   const [showAvoidAreas, setShowAvoidAreas] = useState(false);
 
-  const defaultCenter = [13.0827, 80.2707]; // Chennai
-  const initialZoom = 12;
+  // State to toggle the route card visibility
+  const [isRouteCardOpen, setIsRouteCardOpen] = useState(false);
+  // State to handle map loading
+  const [mapLoaded, setMapLoaded] = useState(false);
+  // State to store user's current position
+  const [userPosition, setUserPosition] = useState(null);
+  // State to store the user's address
+  const [userAddress, setUserAddress] = useState(null);
+  // State to handle geolocation errors
+  const [geoError, setGeoError] = useState(null);
+  // State to store accuracy information
+  const [accuracy, setAccuracy] = useState(null);
+  // State to store timestamp of the last location update
+  const [timestamp, setTimestamp] = useState(null);
+  // State to control visibility of the Live Location panel
+  const [isLocationPanelOpen, setIsLocationPanelOpen] = useState(true);
+  // Ref to store the watchPosition ID
+  const watchIdRef = useRef(null);
+
+  // Function to fetch the address using Nominatim API
+  const fetchAddress = async (latitude, longitude) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'TrailHaven/1.0',
+          },
+        }
+      );
+      const data = await response.json();
+      if (data && data.display_name) {
+        setUserAddress(data.display_name);
+      } else {
+        setUserAddress('Address not found');
+      }
+    } catch (error) {
+      console.error('Error fetching address:', error);
+      setUserAddress('Unable to fetch address');
+    }
+  };
+
+  // Format timestamp to readable time
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    const date = new Date(timestamp);
+    return `${date.toLocaleTimeString()}`;
+  };
+
+  // Function to manually refresh location
+  const refreshLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setUserPosition([latitude, longitude]);
+          setAccuracy(accuracy);
+          setTimestamp(position.timestamp);
+          fetchAddress(latitude, longitude);
+          setGeoError(null);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setGeoError(error.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  };
+
+  // Function to start continuous tracking
+  const startTracking = () => {
+    if (navigator.geolocation && !watchIdRef.current) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setUserPosition([latitude, longitude]);
+          setAccuracy(accuracy);
+          setTimestamp(position.timestamp);
+          fetchAddress(latitude, longitude);
+          setGeoError(null);
+        },
+        (error) => {
+          console.error('Geolocation watch error:', error);
+          setGeoError(error.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  };
+
+  // Function to stop tracking
+  const stopTracking = () => {
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
 
   // Haversine distance formula
   const getDistance = (coord1, coord2) => {
@@ -581,6 +755,19 @@ export default function Maps() {
     setRouteInfo('Select start and end locations, then click a button to find a route.');
   };
 
+  useEffect(() => {
+    // Set map as loaded after component mounts
+    setMapLoaded(true);
+
+    // Initialize geolocation tracking
+    startTracking();
+
+    // Cleanup: Stop tracking when component unmounts
+    return () => {
+      stopTracking();
+    };
+  }, []);
+
   // Animation variants for Framer Motion
   const cardVariants = {
     hidden: { opacity: 0, y: 50, scale: 0.95 },
@@ -595,197 +782,419 @@ export default function Maps() {
 
       {/* Full-Screen Map Container */}
       <div className="absolute inset-0 mt-16 z-10">
-        <MapContainer
-          center={defaultCenter}
-          zoom={initialZoom}
-          style={{ height: '100%', width: '100%', zIndex: 10 }}
-          className="leaflet-map-container"
-        >
-          <MapComponent />
-          {shortestRouteWaypoints.length > 0 && (
-            <RoutingMachine
-              waypoints={shortestRouteWaypoints}
-              color="#0078A8"
-              startLocation={startLocation}
-              endLocation={endLocation}
-              setRouteInfo={setRouteInfo}
-              travelMode={travelMode}
-            />
-          )}
-          {secureRouteWaypoints.length > 0 && (
-            <RoutingMachine
-              waypoints={secureRouteWaypoints}
-              color="#4CAF50"
-              startLocation={startLocation}
-              endLocation={endLocation}
-              setRouteInfo={setRouteInfo}
-              travelMode={travelMode}
-            />
-          )}
-        </MapContainer>
+        {mapLoaded && (
+          <MapComponent
+            userPosition={userPosition}
+            shortestRouteWaypoints={shortestRouteWaypoints}
+            secureRouteWaypoints={secureRouteWaypoints}
+            startLocation={startLocation}
+            endLocation={endLocation}
+            setRouteInfo={setRouteInfo}
+            travelMode={travelMode}
+          />
+        )}
       </div>
 
-      {/* Controls Panel */}
-      <motion.div
-        className="fixed top-20 right-4 z-50 bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-[320px]"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <h3 className="text-lg font-bold mb-4 text-gray-800">Chennai Route Finder</h3>
-
-        <div className="mb-4">
-          <label htmlFor="start" className="block font-bold text-gray-600 mb-1">
-            Start Location:
-          </label>
-          <select
-            id="start"
-            value={startLocation}
-            onChange={(e) => setStartLocation(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded bg-gray-50"
+      {/* Location Info Panel */}
+      <AnimatePresence>
+        {isLocationPanelOpen && (
+          <motion.div
+            className="fixed left-4 bottom-4 z-50 bg-black/80 backdrop-blur-md rounded-lg shadow-lg border border-white/20 p-4 max-w-md w-full sm:max-w-sm"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.3 }}
           >
-            {Object.entries(chennaiLocations).map(([category, locations]) => (
-              <optgroup key={category} label={category}>
-                {Object.keys(locations).map((location) => (
-                  <option key={location} value={location}>
-                    {location}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="end" className="block font-bold text-gray-600 mb-1">
-            End Location:
-          </label>
-          <select
-            id="end"
-            value={endLocation}
-            onChange={(e) => setEndLocation(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded bg-gray-50"
-          >
-            {Object.entries(chennaiLocations).map(([category, locations]) => (
-              <optgroup key={category} label={category}>
-                {Object.keys(locations).map((location) => (
-                  <option key={location} value={location}>
-                    {location}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-4">
-          <label htmlFor="travelMode" className="block font-bold text-gray-600 mb-1">
-            Travel Mode:
-          </label>
-          <select
-            id="travelMode"
-            value={travelMode}
-            onChange={(e) => setTravelMode(e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded bg-gray-50"
-          >
-            <option value="car">Car</option>
-            <option value="walk">Walking</option>
-            <option value="bike">Bicycle</option>
-          </select>
-        </div>
-
-        <div className="mb-4 border-t border-gray-200 pt-2">
-          <h4
-            className="text-blue-600 cursor-pointer mb-2"
-            onClick={() => setShowAvoidAreas(!showAvoidAreas)}
-          >
-            Avoid Areas
-          </h4>
-          {showAvoidAreas && (
-            <div>
-              <div className="flex items-center mb-2">
-                <input
-                  type="checkbox"
-                  id="area1"
-                  checked={avoidHighCrime}
-                  onChange={(e) => setAvoidHighCrime(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="area1" className="text-gray-700">
-                  High Crime Areas
-                </label>
-              </div>
-              <div className="flex items-center mb-2">
-                <input
-                  type="checkbox"
-                  id="area2"
-                  checked={avoidFloodProne}
-                  onChange={(e) => setAvoidFloodProne(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="area2" className="text-gray-700">
-                  Flood-Prone Areas
-                </label>
-              </div>
-              <div className="flex items-center mb-2">
-                <input
-                  type="checkbox"
-                  id="area3"
-                  checked={avoidHeavyTraffic}
-                  onChange={(e) => setAvoidHeavyTraffic(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="area3" className="text-gray-700">
-                  Heavy Traffic Areas
-                </label>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-bold flex items-center">
+                <svg
+                  className="w-5 h-5 mr-2 text-red-500"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Live Location
+              </h3>
+              <div className="flex items-center">
+                <button
+                  onClick={refreshLocation}
+                  className="text-white/70 hover:text-white p-1 mr-2"
+                  title="Refresh location"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+                {watchIdRef.current ? (
+                  <button
+                    onClick={stopTracking}
+                    className="text-white/70 hover:text-white p-1 mr-2"
+                    title="Stop tracking"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={startTracking}
+                    className="text-white/70 hover:text-white p-1 mr-2"
+                    title="Start tracking"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                      />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                )}
+                {/* Close Button */}
+                <button
+                  onClick={() => setIsLocationPanelOpen(false)}
+                  className="text-white/70 hover:text-white p-1"
+                  title="Close panel"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
-          )}
-        </div>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            onClick={findShortestRoute}
-            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Find Shortest Route (A*)
-          </button>
-          <button
-            onClick={findSecureRoute}
-            className="flex-1 px-3 py-2 bg-green-600 text-white rounded hover:bg-green-500"
-          >
-            Find Secure Route
-          </button>
-          <button
-            onClick={toggleTraffic}
-            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Toggle Traffic
-          </button>
-          <button
-            onClick={exportRoute}
-            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Export Route
-          </button>
-          <button
-            onClick={clearRoutes}
-            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Clear
-          </button>
-        </div>
+            {userPosition ? (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-semibold">Latitude:</div>
+                  <div>{userPosition[0].toFixed(6)}</div>
 
-        <div className="p-2 bg-gray-100 rounded text-gray-700 text-sm">{routeInfo}</div>
+                  <div className="font-semibold">Longitude:</div>
+                  <div>{userPosition[1].toFixed(6)}</div>
 
-        <div className="mt-4 pt-2 border-t border-gray-200 text-gray-600 text-sm">
-          {weatherInfo}
-        </div>
-      </motion.div>
+                  <div className="font-semibold">Accuracy:</div>
+                  <div>{accuracy ? `±${accuracy.toFixed(1)} meters` : 'N/A'}</div>
+
+                  <div className="font-semibold">Last update:</div>
+                  <div>{formatTimestamp(timestamp)}</div>
+                </div>
+
+                <div className="mt-3 text-xs">
+                  <div className="font-semibold mb-1">Current Address:</div>
+                  <div className="bg-gray-800/60 p-2 rounded">{userAddress || 'Fetching address...'}</div>
+                </div>
+
+                <p className="mt-3 text-xs text-blue-300 flex items-center">
+                  <svg
+                    className="w-4 h-4 mr-1"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Tracking enabled: {watchIdRef.current ? 'Yes' : 'No'}
+                </p>
+              </>
+            ) : (
+              <div className="bg-gray-800/60 p-3 rounded flex items-center">
+                <svg
+                  className="animate-spin h-5 w-5 mr-3 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <span>Locating your position...</span>
+              </div>
+            )}
+
+            {geoError && (
+              <div className="mt-3 p-2 bg-red-600/70 rounded text-xs">
+                Error: {geoError}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                if (userPosition) {
+                  if (navigator.share) {
+                    navigator.share({
+                      title: 'My Current Location',
+                      text: `I'm at ${userAddress || 'this location'}`,
+                      url: `https://www.google.com/maps?q=${userPosition[0]},${userPosition[1]}`,
+                    }).catch((err) => console.error('Error sharing:', err));
+                  } else {
+                    navigator.clipboard
+                      .writeText(`https://www.google.com/maps?q=${userPosition[0]},${userPosition[1]}`)
+                      .then(() => alert('Location link copied to clipboard!'))
+                      .catch((err) => console.error('Error copying:', err));
+                  }
+                }
+              }}
+              className="mt-3 w-full flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold transition-all"
+              disabled={!userPosition}
+            >
+              <svg
+                className="w-4 h-4 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                />
+              </svg>
+              Share Location
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Button to Toggle Route Card (Top Right) */}
+      <button
+        onClick={() => setIsRouteCardOpen(!isRouteCardOpen)}
+        className="fixed top-20 right-4 z-50 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-full text-lg font-semibold transition-all shadow-lg"
+      >
+        {isRouteCardOpen ? 'Close' : 'Plan Route'}
+      </button>
+
+      {/* Route Card Pop-Up */}
+      <AnimatePresence>
+        {isRouteCardOpen && (
+          <motion.div
+            key="route-card"
+            className="fixed top-32 right-4 z-50 bg-white p-6 rounded-lg shadow-xl border border-gray-200 w-full max-w-[350px] sm:max-w-[400px] max-h-[70vh] overflow-y-auto mx-4 sm:mx-0"
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setIsRouteCardOpen(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Close"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <h3 className="text-xl font-bold mb-4 text-gray-800">Chennai Route Finder</h3>
+
+            <div className="mb-4">
+              <label htmlFor="start" className="block font-semibold text-gray-700 mb-1">
+                Start Location:
+              </label>
+              <select
+                id="start"
+                value={startLocation}
+                onChange={(e) => setStartLocation(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {Object.entries(chennaiLocations).map(([category, locations]) => (
+                  <optgroup key={category} label={category}>
+                    {Object.keys(locations).map((location) => (
+                      <option key={location} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="end" className="block font-semibold text-gray-700 mb-1">
+                End Location:
+              </label>
+              <select
+                id="end"
+                value={endLocation}
+                onChange={(e) => setEndLocation(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {Object.entries(chennaiLocations).map(([category, locations]) => (
+                  <optgroup key={category} label={category}>
+                    {Object.keys(locations).map((location) => (
+                      <option key={location} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="travelMode" className="block font-semibold text-gray-700 mb-1">
+                Travel Mode:
+              </label>
+              <select
+                id="travelMode"
+                value={travelMode}
+                onChange={(e) => setTravelMode(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="car">Car</option>
+                <option value="walk">Walking</option>
+                <option value="bike">Bicycle</option>
+              </select>
+            </div>
+
+            <div className="mb-4 border-t border-gray-200 pt-3">
+              <h4
+                className="text-blue-600 cursor-pointer mb-2 font-semibold"
+                onClick={() => setShowAvoidAreas(!showAvoidAreas)}
+              >
+                Avoid Areas {showAvoidAreas ? '▲' : '▼'}
+              </h4>
+              {showAvoidAreas && (
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="area1"
+                      checked={avoidHighCrime}
+                      onChange={(e) => setAvoidHighCrime(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="area1" className="text-gray-700">
+                      High Crime Areas
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="area2"
+                      checked={avoidFloodProne}
+                      onChange={(e) => setAvoidFloodProne(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="area2" className="text-gray-700">
+                      Flood-Prone Areas
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="area3"
+                      checked={avoidHeavyTraffic}
+                      onChange={(e) => setAvoidHeavyTraffic(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="area3" className="text-gray-700">
+                      Heavy Traffic Areas
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                onClick={findShortestRoute}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Shortest Route (A*)
+              </button>
+              <button
+                onClick={findSecureRoute}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors"
+              >
+                Secure Route
+              </button>
+              <button
+                onClick={toggleTraffic}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Toggle Traffic
+              </button>
+              <button
+                onClick={exportRoute}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Export Route
+              </button>
+              <button
+                onClick={clearRoutes}
+                className="col-span-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Clear Routes
+              </button>
+            </div>
+
+            <div className="p-3 bg-gray-100 rounded-lg text-gray-700 text-sm">{routeInfo}</div>
+
+            <div className="mt-4 pt-3 border-t border-gray-200 text-gray-600 text-sm">
+              {weatherInfo}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Map Legend */}
       <motion.div
-        className="fixed bottom-8 right-4 z-50 bg-white p-3 rounded-lg shadow-lg border border-gray-200"
+        className="fixed bottom-8 right-4 z-50 bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-[200px]"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
