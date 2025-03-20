@@ -1,3 +1,4 @@
+// src/app/maps/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -224,6 +225,139 @@ const checkLocation = (lat, lon) => {
     isInDangerZone: false,
     areaInfo: null,
   };
+};
+
+// SOS Alert Component
+const SosAlert = () => {
+  const [status, setStatus] = useState("");
+  const [location, setLocation] = useState(null);
+  const [isSosOpen, setIsSosOpen] = useState(false);
+
+  // Fetch user location
+  const fetchLocation = () => {
+    setStatus("Fetching location...");
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+          setStatus("✅ Location fetched successfully!");
+        },
+        (error) => {
+          setStatus("Error fetching location: " + error.message);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      setStatus("Geolocation is not supported by this browser.");
+    }
+  };
+
+  // Generic function to send alerts
+  const sendAlert = async (type) => {
+    if (!location) {
+      fetchLocation();
+      return setStatus("Fetching location... Please try again.");
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5002/send-${type}-alert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ location }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setStatus(`✅ ${type.toUpperCase()} Alert Sent Successfully!`);
+      } else {
+        setStatus(`Failed: ${data.error}`);
+      }
+    } catch (error) {
+      setStatus(`Error: ${error.message}`);
+    }
+  };
+
+  return (
+    <>
+      {/* SOS Button */}
+      <button
+        onClick={() => setIsSosOpen(!isSosOpen)}
+        className="fixed bottom-36 right-4 z-50 p-4 bg-red-600 hover:bg-red-700 rounded-full text-white font-semibold transition-all shadow-lg flex items-center justify-center"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v7m0 0v7m0-7h7m-7 0H5"></path>
+        </svg>
+        <span className="ml-2">SOS</span>
+      </button>
+
+      {/* SOS Panel */}
+      <AnimatePresence>
+        {isSosOpen && (
+          <motion.div
+            className="fixed bottom-52 right-4 z-50 bg-gray-800/90 backdrop-blur-md p-4 rounded-lg shadow-xl border border-gray-600/50 w-full max-w-[300px] mx-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-bold text-white flex items-center">
+                🚨 SOS Alert System
+              </h3>
+              <button
+                onClick={() => setIsSosOpen(false)}
+                className="text-gray-400 hover:text-gray-200 transition-colors"
+                title="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={fetchLocation}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold transition-all flex items-center justify-center"
+              >
+                📍 Get Location
+              </button>
+              <button
+                onClick={() => sendAlert("sms")}
+                className="w-full px-4 py-2 bg-teal-600 hover:bg-teal-700 rounded-lg text-white font-semibold transition-all flex items-center justify-center"
+              >
+                📩 Send SMS Alert
+              </button>
+              <button
+                onClick={() => sendAlert("whatsapp")}
+                className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold transition-all flex items-center justify-center"
+              >
+                💬 Send WhatsApp Alert
+              </button>
+              <button
+                onClick={() => sendAlert("call")}
+                className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-semibold transition-all flex items-center justify-center"
+              >
+                📞 Make Emergency Call
+              </button>
+            </div>
+
+            {status && (
+              <p className="mt-3 text-sm text-gray-300 bg-gray-900/50 p-2 rounded">{status}</p>
+            )}
+            {location && (
+              <p className="mt-2 text-sm text-gray-400">
+                📍 Location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
 };
 
 const MapComponent = ({
@@ -1523,7 +1657,7 @@ export default function Maps() {
             <div className="border-t border-gray-200 pt-2">
               <h4 className="text-sm font-bold mb-2 text-gray-800">Crime Levels</h4>
               <div className="flex items-center mb-1">
-                <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
+              <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
                 <span className="text-gray-700 text-xs">Moderate (1-3)</span>
               </div>
               <div className="flex items-center mb-1">
@@ -1539,21 +1673,23 @@ export default function Maps() {
         )}
       </AnimatePresence>
 
-      {/* Status message */}
+      {/* Status Message Overlay */}
       {statusMessage && (
         <motion.div
-          className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-semibold text-center"
-          style={{
-            backgroundColor: messageType === 'safe' ? '#4caf50' : '#f44336',
-          }}
-          initial={{ opacity: 0, y: 20 }}
+          className={`fixed top-32 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-white text-sm font-semibold ${
+            messageType === 'danger' ? 'bg-red-600' : 'bg-green-600'
+          }`}
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
+          exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.3 }}
         >
           {statusMessage}
         </motion.div>
       )}
+
+      {/* SOS Alert Component */}
+      <SosAlert />
     </div>
   );
 }
