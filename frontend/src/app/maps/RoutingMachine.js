@@ -10,38 +10,37 @@ const RoutingMachine = ({ waypoints, color, startLocation, endLocation, setRoute
   useEffect(() => {
     if (!map || waypoints.length < 2) return;
 
+    // Create the routing control
     const routingControl = L.Routing.control({
       waypoints: waypoints.map((wp) => L.latLng(wp[0], wp[1])),
-      routeWhileDragging: false,
       lineOptions: {
-        styles: [{ color, weight: 6 }],
+        styles: [{ color: color, weight: 4 }],
       },
-      createMarker: (i, wp, n) => {
-        if (i === 0 || i === n - 1) {
-          return L.marker(wp.latLng, {
-            icon: L.icon({
-              iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-              iconSize: [25, 41],
-              iconAnchor: [12, 41],
-              popupAnchor: [1, -34],
-              shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-              shadowSize: [41, 41],
-            }),
-          }).bindPopup(i === 0 ? startLocation : endLocation);
-        }
-        return null;
-      },
+      routeWhileDragging: false,
+      addWaypoints: false,
+      fitSelectedRoutes: true,
+      show: false, // Hides the itinerary (directions card)
+      createMarker: () => null, // Disables default markers
+      router: L.Routing.osrmv1({
+        serviceUrl: 'https://router.project-osrm.org/route/v1',
+        profile: travelMode === 'car' ? 'driving' : travelMode === 'bike' ? 'cycling' : 'walking',
+      }),
     }).addTo(map);
 
+    // Listen for route events to update route info
     routingControl.on('routesfound', (e) => {
-      const route = e.routes[0];
-      const distance = (route.summary.totalDistance / 1000).toFixed(2);
-      const time = Math.round(route.summary.totalTime / 60);
-      setRouteInfo(
-        `${color === '#0078A8' ? 'Shortest Route (A*)' : 'Secure Route'}: ${distance} km, ${time} minutes (${travelMode})`
-      );
+      const routes = e.routes;
+      if (routes.length > 0) {
+        const route = routes[0];
+        const distance = (route.summary.totalDistance / 1000).toFixed(2); // Convert to km
+        const time = (route.summary.totalTime / 60).toFixed(2); // Convert to minutes
+        setRouteInfo(
+          `Route from ${startLocation} to ${endLocation}: ${distance} km, ${time} minutes`
+        );
+      }
     });
 
+    // Cleanup on unmount
     return () => {
       map.removeControl(routingControl);
     };

@@ -192,7 +192,7 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
     return <div>Loading map...</div>;
   }
 
-  // Create custom marker icon for user's location using the loaded Leaflet instance
+  // Create custom marker icon for user's location
   const redIcon = new leafletInstance.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
@@ -201,6 +201,29 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
     popupAnchor: [1, -34],
     shadowSize: [41, 41],
   });
+
+  // Create custom marker icons for start and end points of the shortest path
+  const greenIcon = new leafletInstance.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
+
+  const blueIcon = new leafletInstance.Icon({
+    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
+
+  // Get start and end coordinates for the shortest path
+  const startCoords = shortestRouteWaypoints.length > 0 ? shortestRouteWaypoints[0] : null;
+  const endCoords = shortestRouteWaypoints.length > 0 ? shortestRouteWaypoints[shortestRouteWaypoints.length - 1] : null;
 
   return (
     <div className="absolute inset-0" style={{ height: '100%', width: '100%' }}>
@@ -225,6 +248,36 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
                 Lat: {userPosition[0].toFixed(6)}
                 <br />
                 Lng: {userPosition[1].toFixed(6)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Start marker for shortest path */}
+        {startCoords && shortestRouteWaypoints.length > 0 && (
+          <Marker position={startCoords} icon={greenIcon}>
+            <Popup>
+              <div>
+                <strong>Start: {startLocation}</strong>
+                <br />
+                Lat: {startCoords[0].toFixed(6)}
+                <br />
+                Lng: {startCoords[1].toFixed(6)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* End marker for shortest path */}
+        {endCoords && shortestRouteWaypoints.length > 0 && (
+          <Marker position={endCoords} icon={blueIcon}>
+            <Popup>
+              <div>
+                <strong>End: {endLocation}</strong>
+                <br />
+                Lat: {endCoords[0].toFixed(6)}
+                <br />
+                Lng: {endCoords[1].toFixed(6)}
               </div>
             </Popup>
           </Marker>
