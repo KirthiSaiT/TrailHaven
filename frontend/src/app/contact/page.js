@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from '../../components/Navbar';
+import ChatbotEmbed from '@/components/Chatbot';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -50,6 +51,7 @@ export default function Contact() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 text-white">
       {/* Navbar */}
       <Navbar />
+      <ChatbotEmbed />
       
       <div className="container mx-auto px-4 py-16">
         <motion.div

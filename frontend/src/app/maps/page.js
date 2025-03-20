@@ -33,6 +33,7 @@ const RoutingMachine = dynamic(
   { ssr: false }
 );
 
+
 // Chennai points of interest and coordinates with categories
 const chennaiLocations = {
   Residential: {

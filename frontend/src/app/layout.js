@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '../components/Navbar';
+import ChatbotEmbed from '@/components/Chatbot'
 
 export const metadata = {
   title: 'TrailHaven',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }) {
       <body className="antialiased">
         <Navbar />
         {children}
+        <ChatbotEmbed />
       </body>
     </html>
   );
