@@ -123,7 +123,7 @@ const chennaiLocations = {
   },
 };
 
-// Define danger areas in Chennai, including crime levels from the second code
+// Define danger areas in Chennai, including crime levels
 const dangerAreas = {
   highCrime: [
     { name: "Washermanpet", coords: [13.1171, 80.2893], radius: 1000 },
@@ -289,7 +289,7 @@ const MapComponent = ({
     shadowSize: [41, 41],
   });
 
-  // Create custom marker icons for start and end points of the shortest path
+  // Create custom marker icons for start and end points
   const greenIcon = new leafletInstance.Icon({
     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
@@ -308,9 +308,10 @@ const MapComponent = ({
     shadowSize: [41, 41],
   });
 
-  // Get start and end coordinates for the shortest path
-  const startCoords = shortestRouteWaypoints.length > 0 ? shortestRouteWaypoints[0] : null;
-  const endCoords = shortestRouteWaypoints.length > 0 ? shortestRouteWaypoints[shortestRouteWaypoints.length - 1] : null;
+  // Determine which waypoints to use for markers (shortest or secure route)
+  const activeWaypoints = shortestRouteWaypoints.length > 0 ? shortestRouteWaypoints : secureRouteWaypoints;
+  const startCoords = activeWaypoints.length > 0 ? activeWaypoints[0] : null;
+  const endCoords = activeWaypoints.length > 0 ? activeWaypoints[activeWaypoints.length - 1] : null;
 
   return (
     <div className="absolute inset-0" style={{ height: '100%', width: '100%' }}>
@@ -343,8 +344,8 @@ const MapComponent = ({
           </Marker>
         )}
 
-        {/* Start marker for shortest path */}
-        {startCoords && shortestRouteWaypoints.length > 0 && (
+        {/* Start marker for active route (shortest or secure) */}
+        {startCoords && activeWaypoints.length > 0 && (
           <Marker position={startCoords} icon={greenIcon}>
             <Popup>
               <div>
@@ -358,8 +359,8 @@ const MapComponent = ({
           </Marker>
         )}
 
-        {/* End marker for shortest path */}
-        {endCoords && shortestRouteWaypoints.length > 0 && (
+        {/* End marker for active route (shortest or secure) */}
+        {endCoords && activeWaypoints.length > 0 && (
           <Marker position={endCoords} icon={blueIcon}>
             <Popup>
               <div>
@@ -478,6 +479,8 @@ export default function Maps() {
 
   // State to toggle the route card visibility
   const [isRouteCardOpen, setIsRouteCardOpen] = useState(false);
+  // State to toggle the map legend visibility
+  const [isLegendOpen, setIsLegendOpen] = useState(true);
   // State to handle map loading
   const [mapLoaded, setMapLoaded] = useState(false);
   // State to store user's current position
@@ -1288,12 +1291,12 @@ export default function Maps() {
         {isRouteCardOpen ? 'Close' : 'Plan Route'}
       </button>
 
-      {/* Route Card Pop-Up */}
+      {/* Route Card Pop-Up with Updated Colors */}
       <AnimatePresence>
         {isRouteCardOpen && (
           <motion.div
             key="route-card"
-            className="fixed top-32 right-4 z-50 bg-white p-6 rounded-lg shadow-xl border border-gray-200 w-full max-w-[350px] sm:max-w-[400px] max-h-[70vh] overflow-y-auto mx-4 sm:mx-0"
+            className="fixed top-32 right-4 z-50 bg-gray-800/90 backdrop-blur-md p-6 rounded-lg shadow-xl border border-gray-600/50 w-full max-w-[350px] sm:max-w-[400px] max-h-[70vh] overflow-y-auto mx-4 sm:mx-0"
             variants={cardVariants}
             initial="hidden"
             animate="visible"
@@ -1302,7 +1305,7 @@ export default function Maps() {
             {/* Close Button */}
             <button
               onClick={() => setIsRouteCardOpen(false)}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 transition-colors"
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-200 transition-colors"
               title="Close"
             >
               <svg
@@ -1316,22 +1319,22 @@ export default function Maps() {
               </svg>
             </button>
 
-            <h3 className="text-xl font-bold mb-4 text-gray-800">Chennai Route Finder</h3>
+            <h3 className="text-xl font-bold mb-4 text-white">Chennai Route Finder</h3>
 
             <div className="mb-4">
-              <label htmlFor="start" className="block font-semibold text-gray-700 mb-1">
+              <label htmlFor="start" className="block font-semibold text-gray-300 mb-1">
                 Start Location:
               </label>
               <select
                 id="start"
                 value={startLocation}
                 onChange={(e) => setStartLocation(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full p-2 border border-gray-600 rounded bg-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 {Object.entries(chennaiLocations).map(([category, locations]) => (
-                  <optgroup key={category} label={category}>
+                  <optgroup key={category} label={category} className="bg-gray-800 text-gray-300">
                     {Object.keys(locations).map((location) => (
-                      <option key={location} value={location}>
+                      <option key={location} value={location} className="bg-gray-700 text-gray-200">
                         {location}
                       </option>
                     ))}
@@ -1341,19 +1344,19 @@ export default function Maps() {
             </div>
 
             <div className="mb-4">
-              <label htmlFor="end" className="block font-semibold text-gray-700 mb-1">
+              <label htmlFor="end" className="block font-semibold text-gray-300 mb-1">
                 End Location:
               </label>
               <select
                 id="end"
                 value={endLocation}
                 onChange={(e) => setEndLocation(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full p-2 border border-gray-600 rounded bg-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
                 {Object.entries(chennaiLocations).map(([category, locations]) => (
-                  <optgroup key={category} label={category}>
+                  <optgroup key={category} label={category} className="bg-gray-800 text-gray-300">
                     {Object.keys(locations).map((location) => (
-                      <option key={location} value={location}>
+                      <option key={location} value={location} className="bg-gray-700 text-gray-200">
                         {location}
                       </option>
                     ))}
@@ -1363,24 +1366,24 @@ export default function Maps() {
             </div>
 
             <div className="mb-4">
-              <label htmlFor="travelMode" className="block font-semibold text-gray-700 mb-1">
+              <label htmlFor="travelMode" className="block font-semibold text-gray-300 mb-1">
                 Travel Mode:
               </label>
               <select
                 id="travelMode"
                 value={travelMode}
                 onChange={(e) => setTravelMode(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full p-2 border border-gray-600 rounded bg-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
               >
-                <option value="car">Car</option>
-                <option value="walk">Walking</option>
-                <option value="bike">Bicycle</option>
+                <option value="car" className="bg-gray-700 text-gray-200">Car</option>
+                <option value="walk" className="bg-gray-700 text-gray-200">Walking</option>
+                <option value="bike" className="bg-gray-700 text-gray-200">Bicycle</option>
               </select>
             </div>
 
-            <div className="mb-4 border-t border-gray-200 pt-3">
+            <div className="mb-4 border-t border-gray-600 pt-3">
               <h4
-                className="text-blue-600 cursor-pointer mb-2 font-semibold"
+                className="text-cyan-400 cursor-pointer mb-2 font-semibold"
                 onClick={() => setShowAvoidAreas(!showAvoidAreas)}
               >
                 Avoid Areas {showAvoidAreas ? '▲' : '▼'}
@@ -1393,9 +1396,9 @@ export default function Maps() {
                       id="area1"
                       checked={avoidHighCrime}
                       onChange={(e) => setAvoidHighCrime(e.target.checked)}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="mr-2 h-4 w-4 text-cyan-500 focus:ring-cyan-400 border-gray-500 rounded bg-gray-700"
                     />
-                    <label htmlFor="area1" className="text-gray-700">
+                    <label htmlFor="area1" className="text-gray-300">
                       High Crime Areas
                     </label>
                   </div>
@@ -1405,9 +1408,9 @@ export default function Maps() {
                       id="area2"
                       checked={avoidFloodProne}
                       onChange={(e) => setAvoidFloodProne(e.target.checked)}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="mr-2 h-4 w-4 text-cyan-500 focus:ring-cyan-400 border-gray-500 rounded bg-gray-700"
                     />
-                    <label htmlFor="area2" className="text-gray-700">
+                    <label htmlFor="area2" className="text-gray-300">
                       Flood-Prone Areas
                     </label>
                   </div>
@@ -1417,9 +1420,9 @@ export default function Maps() {
                       id="area3"
                       checked={avoidHeavyTraffic}
                       onChange={(e) => setAvoidHeavyTraffic(e.target.checked)}
-                      className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="mr-2 h-4 w-4 text-cyan-500 focus:ring-cyan-400 border-gray-500 rounded bg-gray-700"
                     />
-                    <label htmlFor="area3" className="text-gray-700">
+                    <label htmlFor="area3" className="text-gray-300">
                       Heavy Traffic Areas
                     </label>
                   </div>
@@ -1430,89 +1433,111 @@ export default function Maps() {
             <div className="grid grid-cols-2 gap-2 mb-4">
               <button
                 onClick={findShortestRoute}
-                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
               >
                 Shortest Route (A*)
               </button>
               <button
                 onClick={findSecureRoute}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors"
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors shadow-md"
               >
                 Secure Route
               </button>
               <button
                 onClick={toggleTraffic}
-                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
               >
                 Toggle Traffic
               </button>
               <button
                 onClick={exportRoute}
-                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
               >
                 Export Route
               </button>
               <button
                 onClick={clearRoutes}
-                className="col-span-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                className="col-span-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors shadow-md"
               >
                 Clear Routes
               </button>
             </div>
 
-            <div className="p-3 bg-gray-100 rounded-lg text-gray-700 text-sm">{routeInfo}</div>
+            <div className="p-3 bg-gray-900/50 rounded-lg text-gray-300 text-sm">{routeInfo}</div>
 
-            <div className="mt-4 pt-3 border-t border-gray-200 text-gray-600 text-sm">
+            <div className="mt-4 pt-3 border-t border-gray-600 text-gray-400 text-sm">
               {weatherInfo}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Map Legend */}
-      <motion.div
-        className="fixed bottom-8 right-4 z-50 bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-[200px]"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <h4 className="text-sm font-bold mb-2 text-gray-800">Map Legend</h4>
-        <div className="flex items-center mb-1">
-          <span className="w-5 h-1 bg-blue-600 mr-2"></span>
-          <span className="text-gray-700 text-xs">Shortest Route (A*)</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <span className="w-5 h-1 bg-green-600 mr-2"></span>
-          <span className="text-gray-700 text-xs">Secure Route</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <span className="w-3 h-3 rounded-full bg-red-400 mr-2"></span>
-          <span className="text-gray-700 text-xs">High Crime Area</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
-          <span className="text-gray-700 text-xs">Flood-Prone Area</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
-          <span className="text-gray-700 text-xs">Heavy Traffic Area</span>
-        </div>
-        <div className="border-t border-gray-200 pt-2">
-          <h4 className="text-sm font-bold mb-2 text-gray-800">Crime Levels</h4>
-          <div className="flex items-center mb-1">
-            <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
-            <span className="text-gray-700 text-xs">Moderate (1-3)</span>
-          </div>
-          <div className="flex items-center mb-1">
-            <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-            <span className="text-gray-700 text-xs">High (4-6)</span>
-          </div>
-          <div className="flex items-center">
-            <span className="w-3 h-3 rounded-full bg-red-800 mr-2"></span>
-            <span className="text-gray-700 text-xs">Very High (7-10)</span>
-          </div>
-        </div>
-      </motion.div>
+      {/* Map Legend with Close Button */}
+      <AnimatePresence>
+        {isLegendOpen && (
+          <motion.div
+            className="fixed bottom-8 right-4 z-50 bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-[200px]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setIsLegendOpen(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 transition-colors"
+              title="Close"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <h4 className="text-sm font-bold mb-2 text-gray-800">Map Legend</h4>
+            <div className="flex items-center mb-1">
+              <span className="w-5 h-1 bg-blue-600 mr-2"></span>
+              <span className="text-gray-700 text-xs">Shortest Route (A*)</span>
+            </div>
+            <div className="flex items-center mb-1">
+              <span className="w-5 h-1 bg-green-600 mr-2"></span>
+              <span className="text-gray-700 text-xs">Secure Route</span>
+            </div>
+            <div className="flex items-center mb-1">
+              <span className="w-3 h-3 rounded-full bg-red-400 mr-2"></span>
+              <span className="text-gray-700 text-xs">High Crime Area</span>
+            </div>
+            <div className="flex items-center mb-1">
+              <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
+              <span className="text-gray-700 text-xs">Flood-Prone Area</span>
+            </div>
+            <div className="flex items-center mb-1">
+              <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
+              <span className="text-gray-700 text-xs">Heavy Traffic Area</span>
+            </div>
+            <div className="border-t border-gray-200 pt-2">
+              <h4 className="text-sm font-bold mb-2 text-gray-800">Crime Levels</h4>
+              <div className="flex items-center mb-1">
+                <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
+                <span className="text-gray-700 text-xs">Moderate (1-3)</span>
+              </div>
+              <div className="flex items-center mb-1">
+                <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
+                <span className="text-gray-700 text-xs">High (4-6)</span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-3 h-3 rounded-full bg-red-800 mr-2"></span>
+                <span className="text-gray-700 text-xs">Very High (7-10)</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Status message */}
       {statusMessage && (
