@@ -1,4 +1,3 @@
-// src/app/maps/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -124,7 +123,7 @@ const chennaiLocations = {
   },
 };
 
-// Define danger areas in Chennai
+// Define danger areas in Chennai, including crime levels from the second code
 const dangerAreas = {
   highCrime: [
     { name: "Washermanpet", coords: [13.1171, 80.2893], radius: 1000 },
@@ -155,9 +154,89 @@ const dangerAreas = {
     { name: "Vadapalani", coords: [13.0519, 80.2121], radius: 750 },
     { name: "Chromepet", coords: [12.9516, 80.1462], radius: 700 },
   ],
+  crimeLevels: [
+    { area: "T. Nagar", center: [13.0418, 80.2336], radius: 300, crimeLevel: 7 },
+    { area: "Anna Nagar", center: [13.0853, 80.2108], radius: 350, crimeLevel: 6 },
+    { area: "New Prince Bhavani Engineering College", center: [12.9146, 80.1662], radius: 200, crimeLevel: 3 },
+    { area: "Expanded Velachery North", center: [12.9725, 80.2210], radius: 500, crimeLevel: 6 },
+    { area: "Adyar", center: [13.0067, 80.2570], radius: 300, crimeLevel: 4 },
+    { area: "Kodambakkam", center: [13.0582, 80.2301], radius: 300, crimeLevel: 6 },
+    { area: "Mylapore", center: [13.0337, 80.2671], radius: 250, crimeLevel: 5 },
+    { area: "Nungambakkam", center: [13.0634, 80.2435], radius: 350, crimeLevel: 7 },
+    { area: "Royapettah", center: [13.0603, 80.2684], radius: 300, crimeLevel: 8 },
+    { area: "Saidapet", center: [13.0236, 80.2210], radius: 250, crimeLevel: 6 },
+    { area: "Triplicane", center: [13.0604, 80.2760], radius: 300, crimeLevel: 8 },
+    { area: "Perambur", center: [13.1143, 80.2472], radius: 350, crimeLevel: 6 },
+    { area: "Tambaram", center: [12.9229, 80.1275], radius: 400, crimeLevel: 5 },
+    { area: "Chromepet", center: [12.9508, 80.1444], radius: 300, crimeLevel: 5 },
+    { area: "Guindy", center: [13.0084, 80.2170], radius: 320, crimeLevel: 7 },
+    { area: "Thiruvanmiyur", center: [12.9823, 80.2591], radius: 280, crimeLevel: 4 },
+    { area: "Egmore", center: [13.0787, 80.2614], radius: 300, crimeLevel: 7 },
+    { area: "Vepery", center: [13.0835, 80.2605], radius: 250, crimeLevel: 6 },
+    { area: "Parrys", center: [13.0908, 80.2935], radius: 320, crimeLevel: 9 },
+    { area: "Washermanpet", center: [13.1183, 80.2895], radius: 300, crimeLevel: 8 },
+    { area: "Broadway", center: [13.0855, 80.2832], radius: 280, crimeLevel: 8 },
+  ],
 };
 
-const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoints, startLocation, endLocation, setRouteInfo, travelMode }) => {
+// Function to get circle color based on crime level
+const getCircleColor = (crimeLevel) => {
+  if (crimeLevel <= 3) {
+    return "#ff9800"; // Orange for moderate crime levels
+  } else if (crimeLevel <= 6) {
+    return "#f44336"; // Red for high crime levels
+  } else {
+    return "#b71c1c"; // Dark red for very high crime levels
+  }
+};
+
+// Calculate distance between two coordinates in meters using Haversine formula
+const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000; // Radius of the earth in meters
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in meters
+  return d;
+};
+
+const deg2rad = (deg) => {
+  return deg * (Math.PI / 180);
+};
+
+// Check if user's location is in any danger zone
+const checkLocation = (lat, lon) => {
+  for (let i = 0; i < dangerAreas.crimeLevels.length; i++) {
+    const area = dangerAreas.crimeLevels[i];
+    const distance = getDistanceFromLatLonInM(lat, lon, area.center[0], area.center[1]);
+    if (distance <= area.radius) {
+      return {
+        isInDangerZone: true,
+        areaInfo: area,
+      };
+    }
+  }
+  return {
+    isInDangerZone: false,
+    areaInfo: null,
+  };
+};
+
+const MapComponent = ({
+  userPosition,
+  shortestRouteWaypoints,
+  secureRouteWaypoints,
+  startLocation,
+  endLocation,
+  setRouteInfo,
+  travelMode,
+  mapRef,
+  handleLocateMe,
+}) => {
   const [isMounted, setIsMounted] = useState(false);
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [leafletInstance, setLeafletInstance] = useState(null);
@@ -173,7 +252,15 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
         import('leaflet-routing-machine/dist/leaflet-routing-machine.css'),
       ])
         .then(([L]) => {
-          setLeafletInstance(L); // Store the Leaflet instance
+          // Fix for default marker icons in React Leaflet
+          delete L.Icon.Default.prototype._getIconUrl;
+          L.Icon.Default.mergeOptions({
+            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+          });
+
+          setLeafletInstance(L);
           setLeafletLoaded(true);
           setIsMounted(true);
         })
@@ -232,6 +319,9 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
         zoom={initialZoom}
         style={{ height: '100%', width: '100%', zIndex: 10 }}
         className="leaflet-map-container"
+        whenCreated={(map) => {
+          mapRef.current = map;
+        }}
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -314,6 +404,26 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
             <Popup>Heavy Traffic Area: {area.name}</Popup>
           </Circle>
         ))}
+        {/* Render crime level areas with color-coded circles */}
+        {dangerAreas.crimeLevels.map((location, index) => (
+          <Circle
+            key={`crimeLevel-${index}`}
+            center={location.center}
+            radius={location.radius}
+            pathOptions={{
+              color: getCircleColor(location.crimeLevel),
+              weight: 2,
+              fillColor: getCircleColor(location.crimeLevel),
+              fillOpacity: 0.5,
+            }}
+          >
+            <Popup>
+              <b>{location.area}</b>
+              <br />
+              Crime Level: {location.crimeLevel}/10
+            </Popup>
+          </Circle>
+        ))}
 
         {/* Render routes */}
         {shortestRouteWaypoints.length > 0 && (
@@ -337,6 +447,14 @@ const MapComponent = ({ userPosition, shortestRouteWaypoints, secureRouteWaypoin
           />
         )}
       </MapContainer>
+
+      {/* Locate Me button */}
+      <button
+        onClick={handleLocateMe}
+        className="fixed top-20 left-4 z-50 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-full text-lg font-semibold transition-all shadow-lg"
+      >
+        Locate Me
+      </button>
     </div>
   );
 };
@@ -376,6 +494,11 @@ export default function Maps() {
   const [isLocationPanelOpen, setIsLocationPanelOpen] = useState(true);
   // Ref to store the watchPosition ID
   const watchIdRef = useRef(null);
+  // Ref to store the map instance
+  const mapRef = useRef(null);
+  // State for status messages
+  const [statusMessage, setStatusMessage] = useState(null);
+  const [messageType, setMessageType] = useState('safe');
 
   // Function to fetch the address using Nominatim API
   const fetchAddress = async (latitude, longitude) => {
@@ -457,7 +580,7 @@ export default function Maps() {
     }
   };
 
-  // Haversine distance formula
+  // Haversine distance formula (in km)
   const getDistance = (coord1, coord2) => {
     const R = 6371; // Radius of the Earth in km
     const dLat = ((coord2[0] - coord1[0]) * Math.PI) / 180;
@@ -470,6 +593,85 @@ export default function Maps() {
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+
+  // Handle user location finding with "Locate Me" button
+  const handleLocateMe = () => {
+    setStatusMessage("Fetching your location...");
+    setMessageType('safe');
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setUserPosition([latitude, longitude]);
+          setAccuracy(accuracy);
+          setTimestamp(position.timestamp);
+          fetchAddress(latitude, longitude);
+          setGeoError(null);
+
+          // Center map on user's location
+          if (mapRef.current) {
+            mapRef.current.setView([latitude, longitude], 14);
+          }
+
+          // Check if user is in any danger zone
+          const locationCheck = checkLocation(latitude, longitude);
+
+          if (locationCheck.isInDangerZone) {
+            const area = locationCheck.areaInfo;
+            setStatusMessage(`Warning: You are in ${area.area} (Crime Level: ${area.crimeLevel}/10)`);
+            setMessageType('danger');
+          } else {
+            setStatusMessage("You are in a safe area.");
+            setMessageType('safe');
+          }
+
+          // Hide message after 5 seconds
+          setTimeout(() => {
+            setStatusMessage(null);
+          }, 5000);
+        },
+        (error) => {
+          let errorMessage;
+
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = "Location access denied. Please enable location services.";
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = "Location information is unavailable.";
+              break;
+            case error.TIMEOUT:
+              errorMessage = "Location request timed out.";
+              break;
+            default:
+              errorMessage = "An unknown error occurred.";
+          }
+
+          setStatusMessage(errorMessage);
+          setMessageType('danger');
+
+          // Hide message after 5 seconds
+          setTimeout(() => {
+            setStatusMessage(null);
+          }, 5000);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 30000,
+          timeout: 27000,
+        }
+      );
+    } else {
+      setStatusMessage("Geolocation is not supported by this browser.");
+      setMessageType('danger');
+
+      // Hide message after 5 seconds
+      setTimeout(() => {
+        setStatusMessage(null);
+      }, 5000);
+    }
   };
 
   // A* Algorithm Implementation
@@ -493,7 +695,21 @@ export default function Maps() {
       }
     }
 
-    dangerPoints.forEach((point) => {
+    // Include crime levels in the danger points for A* pathfinding
+    const allDangerPoints = [...dangerPoints];
+    if (avoidHighCrime) {
+      dangerAreas.crimeLevels.forEach((area) => {
+        if (area.crimeLevel >= 7) { // Consider areas with crime level 7+ as high crime
+          allDangerPoints.push({
+            name: area.area,
+            coords: area.center,
+            radius: area.radius,
+          });
+        }
+      });
+    }
+
+    allDangerPoints.forEach((point) => {
       const latIdx = Math.floor((point.coords[0] - bounds.minLat) / gridSize);
       const lngIdx = Math.floor((point.coords[1] - bounds.minLng) / gridSize);
 
@@ -514,7 +730,7 @@ export default function Maps() {
 
           const distance = getDistance([lat, lng], point.coords);
           if (distance < point.radius / 1000) {
-            grid[i][j] = point.name.includes('High Crime') && avoidHighCrime ? Infinity : 10;
+            grid[i][j] = point.name.includes('High Crime') || point.crimeLevel >= 7 ? Infinity : 10;
           }
         }
       }
@@ -650,6 +866,12 @@ export default function Maps() {
         if (avoidHighCrime) {
           for (const area of dangerAreas.highCrime) {
             if (getDistance(coords, area.coords) < area.radius / 1000) {
+              isSafe = false;
+              break;
+            }
+          }
+          for (const area of dangerAreas.crimeLevels) {
+            if (area.crimeLevel >= 7 && getDistance(coords, area.center) < area.radius / 1000) {
               isSafe = false;
               break;
             }
@@ -844,6 +1066,8 @@ export default function Maps() {
             endLocation={endLocation}
             setRouteInfo={setRouteInfo}
             travelMode={travelMode}
+            mapRef={mapRef}
+            handleLocateMe={handleLocateMe}
           />
         )}
       </div>
@@ -1269,11 +1493,42 @@ export default function Maps() {
           <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
           <span className="text-gray-700 text-xs">Flood-Prone Area</span>
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center mb-1">
           <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
           <span className="text-gray-700 text-xs">Heavy Traffic Area</span>
         </div>
+        <div className="border-t border-gray-200 pt-2">
+          <h4 className="text-sm font-bold mb-2 text-gray-800">Crime Levels</h4>
+          <div className="flex items-center mb-1">
+            <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
+            <span className="text-gray-700 text-xs">Moderate (1-3)</span>
+          </div>
+          <div className="flex items-center mb-1">
+            <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
+            <span className="text-gray-700 text-xs">High (4-6)</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-3 h-3 rounded-full bg-red-800 mr-2"></span>
+            <span className="text-gray-700 text-xs">Very High (7-10)</span>
+          </div>
+        </div>
       </motion.div>
+
+      {/* Status message */}
+      {statusMessage && (
+        <motion.div
+          className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-semibold text-center"
+          style={{
+            backgroundColor: messageType === 'safe' ? '#4caf50' : '#f44336',
+          }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {statusMessage}
+        </motion.div>
+      )}
     </div>
   );
 }
