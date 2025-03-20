@@ -1,52 +1,49 @@
-// src/app/maps/RoutingMachine.js
+'use client';
+
 import { useEffect } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-routing-machine';
 
+// RoutingMachine component to integrate leaflet-routing-machine with react-leaflet
 const RoutingMachine = ({ waypoints, color, startLocation, endLocation, setRouteInfo, travelMode }) => {
-  const map = useMap();
+  const map = useMap(); // Get the map instance from react-leaflet
 
   useEffect(() => {
-    if (!map || waypoints.length < 2) return;
+    if (!map || !waypoints || waypoints.length < 2) return;
 
     // Create the routing control
     const routingControl = L.Routing.control({
       waypoints: waypoints.map((wp) => L.latLng(wp[0], wp[1])),
+      routeWhileDragging: false,
+      show: false, // Hide the default routing UI
+      addWaypoints: false, // Disable adding new waypoints by clicking
+      fitSelectedRoutes: true, // Automatically zoom to fit the route
       lineOptions: {
         styles: [{ color: color, weight: 4 }],
       },
-      routeWhileDragging: false,
-      addWaypoints: false,
-      fitSelectedRoutes: true,
-      show: false, // Hides the itinerary (directions card)
-      createMarker: () => null, // Disables default markers
-      router: L.Routing.osrmv1({
-        serviceUrl: 'https://router.project-osrm.org/route/v1',
-        profile: travelMode === 'car' ? 'driving' : travelMode === 'bike' ? 'cycling' : 'walking',
-      }),
+      createMarker: () => null, // Disable default markers (we already have custom markers)
     }).addTo(map);
 
-    // Listen for route events to update route info
+    // Update route info when a route is found
     routingControl.on('routesfound', (e) => {
-      const routes = e.routes;
-      if (routes.length > 0) {
-        const route = routes[0];
-        const distance = (route.summary.totalDistance / 1000).toFixed(2); // Convert to km
-        const time = (route.summary.totalTime / 60).toFixed(2); // Convert to minutes
-        setRouteInfo(
-          `Route from ${startLocation} to ${endLocation}: ${distance} km, ${time} minutes`
-        );
-      }
+      const route = e.routes[0];
+      const distance = (route.summary.totalDistance / 1000).toFixed(2); // Convert to km
+      const time = (route.summary.totalTime / 60).toFixed(2); // Convert to minutes
+      setRouteInfo(
+        `Route from ${startLocation} to ${endLocation} (${travelMode}): ${distance} km, ${time} mins`
+      );
     });
 
-    // Cleanup on unmount
+    // Cleanup: Remove the routing control when the component unmounts
     return () => {
-      map.removeControl(routingControl);
+      if (map && routingControl) {
+        map.removeControl(routingControl);
+      }
     };
   }, [map, waypoints, color, startLocation, endLocation, setRouteInfo, travelMode]);
 
-  return null;
+  return null; // This component doesn't render anything itself
 };
 
 export default RoutingMachine;

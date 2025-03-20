@@ -1,4 +1,3 @@
-// src/app/maps/page.js
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -191,9 +190,9 @@ const getCircleColor = (crimeLevel) => {
   }
 };
 
-// Calculate distance between two coordinates in meters using Haversine formula
-const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
-  const R = 6371000; // Radius of the earth in meters
+// Calculate distance between two coordinates in kilometers using Haversine formula
+const getDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Radius of the earth in km
   const dLat = deg2rad(lat2 - lat1);
   const dLon = deg2rad(lon2 - lon1);
   const a =
@@ -201,7 +200,7 @@ const getDistanceFromLatLonInM = (lat1, lon1, lat2, lon2) => {
     Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const d = R * c; // Distance in meters
+  const d = R * c; // Distance in km
   return d;
 };
 
@@ -209,12 +208,96 @@ const deg2rad = (deg) => {
   return deg * (Math.PI / 180);
 };
 
+// Calculate the minimum distance from a point to any danger zone
+const getMinDistanceToDangerZone = (lat, lon, avoidHighCrime, avoidFloodProne, avoidHeavyTraffic) => {
+  let minDistance = Infinity;
+
+  // High crime areas
+  if (avoidHighCrime) {
+    for (const area of dangerAreas.highCrime) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      minDistance = Math.min(minDistance, distance - area.radius / 1000);
+    }
+  }
+
+  // Flood-prone areas
+  if (avoidFloodProne) {
+    for (const area of dangerAreas.floodProne) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      minDistance = Math.min(minDistance, distance - area.radius / 1000);
+    }
+  }
+
+  // Heavy traffic areas
+  if (avoidHeavyTraffic) {
+    for (const area of dangerAreas.heavyTraffic) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      minDistance = Math.min(minDistance, distance - area.radius / 1000);
+    }
+  }
+
+  // Cautious zones (crime level 7+)
+  for (const area of dangerAreas.crimeLevels) {
+    if (area.crimeLevel >= 7) {
+      const distance = getDistance(lat, lon, area.center[0], area.center[1]);
+      minDistance = Math.min(minDistance, distance - area.radius / 1000);
+    }
+  }
+
+  return minDistance > 0 ? minDistance : 0; // Ensure non-negative distance
+};
+
+// Check if a point is inside any danger zone (used to block paths)
+const isPointInDangerZone = (lat, lon, avoidHighCrime, avoidFloodProne, avoidHeavyTraffic) => {
+  // Check high crime areas
+  if (avoidHighCrime) {
+    for (const area of dangerAreas.highCrime) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      if (distance <= area.radius / 1000) {
+        return true;
+      }
+    }
+  }
+
+  // Check flood-prone areas
+  if (avoidFloodProne) {
+    for (const area of dangerAreas.floodProne) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      if (distance <= area.radius / 1000) {
+        return true;
+      }
+    }
+  }
+
+  // Check heavy traffic areas
+  if (avoidHeavyTraffic) {
+    for (const area of dangerAreas.heavyTraffic) {
+      const distance = getDistance(lat, lon, area.coords[0], area.coords[1]);
+      if (distance <= area.radius / 1000) {
+        return true;
+      }
+    }
+  }
+
+  // Check cautious zones (crime levels 7+)
+  for (const area of dangerAreas.crimeLevels) {
+    if (area.crimeLevel >= 7) {
+      const distance = getDistance(lat, lon, area.center[0], area.center[1]);
+      if (distance <= area.radius / 1000) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 // Check if user's location is in any danger zone
 const checkLocation = (lat, lon) => {
   for (let i = 0; i < dangerAreas.crimeLevels.length; i++) {
     const area = dangerAreas.crimeLevels[i];
-    const distance = getDistanceFromLatLonInM(lat, lon, area.center[0], area.center[1]);
-    if (distance <= area.radius) {
+    const distance = getDistance(lat, lon, area.center[0], area.center[1]);
+    if (distance <= area.radius / 1000) {
       return {
         isInDangerZone: true,
         areaInfo: area,
@@ -248,7 +331,7 @@ const SosAlert = () => {
         (error) => {
           setStatus("Error fetching location: " + error.message);
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
       );
     } else {
       setStatus("Geolocation is not supported by this browser.");
@@ -717,21 +800,6 @@ export default function Maps() {
     }
   };
 
-  // Haversine distance formula (in km)
-  const getDistance = (coord1, coord2) => {
-    const R = 6371; // Radius of the Earth in km
-    const dLat = ((coord2[0] - coord1[0]) * Math.PI) / 180;
-    const dLon = ((coord2[1] - coord1[1]) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((coord1[0] * Math.PI) / 180) *
-        Math.cos((coord2[0] * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
   // Handle user location finding with "Locate Me" button
   const handleLocateMe = () => {
     setStatusMessage("Fetching your location...");
@@ -811,9 +879,9 @@ export default function Maps() {
     }
   };
 
-  // A* Algorithm Implementation
-  const aStarAlgorithm = (start, end, dangerPoints) => {
-    const gridSize = 0.005; // approx 500m grid cells
+  // A* Algorithm Implementation for Shortest Route
+  const aStarShortestRoute = (start, end) => {
+    const gridSize = 0.005; // Approx 500m grid cells
     const bounds = {
       minLat: 12.8,
       maxLat: 13.3,
@@ -824,54 +892,10 @@ export default function Maps() {
     const latCells = Math.ceil((bounds.maxLat - bounds.minLat) / gridSize);
     const lngCells = Math.ceil((bounds.maxLng - bounds.minLng) / gridSize);
 
-    const grid = [];
-    for (let i = 0; i < latCells; i++) {
-      grid[i] = [];
-      for (let j = 0; j < lngCells; j++) {
-        grid[i][j] = 1; // Base cost
-      }
-    }
-
-    // Include crime levels in the danger points for A* pathfinding
-    const allDangerPoints = [...dangerPoints];
-    if (avoidHighCrime) {
-      dangerAreas.crimeLevels.forEach((area) => {
-        if (area.crimeLevel >= 7) { // Consider areas with crime level 7+ as high crime
-          allDangerPoints.push({
-            name: area.area,
-            coords: area.center,
-            radius: area.radius,
-          });
-        }
-      });
-    }
-
-    allDangerPoints.forEach((point) => {
-      const latIdx = Math.floor((point.coords[0] - bounds.minLat) / gridSize);
-      const lngIdx = Math.floor((point.coords[1] - bounds.minLng) / gridSize);
-
-      const cellRadius = Math.ceil(point.radius / 1000 / gridSize);
-
-      for (
-        let i = Math.max(0, latIdx - cellRadius);
-        i < Math.min(latCells, latIdx + cellRadius);
-        i++
-      ) {
-        for (
-          let j = Math.max(0, lngIdx - cellRadius);
-          j < Math.min(lngCells, lngIdx + cellRadius);
-          j++
-        ) {
-          const lat = bounds.minLat + i * gridSize;
-          const lng = bounds.minLng + j * gridSize;
-
-          const distance = getDistance([lat, lng], point.coords);
-          if (distance < point.radius / 1000) {
-            grid[i][j] = point.name.includes('High Crime') || point.crimeLevel >= 7 ? Infinity : 10;
-          }
-        }
-      }
-    });
+    // Initialize grid with base cost
+    const grid = Array(latCells)
+      .fill()
+      .map(() => Array(lngCells).fill(1));
 
     const toGridIndices = (coords) => {
       const latIdx = Math.floor((coords[0] - bounds.minLat) / gridSize);
@@ -899,8 +923,8 @@ export default function Maps() {
     openSet.set(posKey(startPos), {
       pos: startPos,
       g: 0, // Time in minutes
-      h: (getDistance(toLatLng(startPos), end) / speed[travelMode]) * 60,
-      f: (getDistance(toLatLng(startPos), end) / speed[travelMode]) * 60,
+      h: (getDistance(start[0], start[1], end[0], end[1]) / speed[travelMode]) * 60,
+      f: (getDistance(start[0], start[1], end[0], end[1]) / speed[travelMode]) * 60,
       parent: null,
     });
 
@@ -956,18 +980,23 @@ export default function Maps() {
 
         const neighborKey = posKey(neighbor);
 
-        if (closedSet.has(neighborKey) || grid[neighbor.lat][neighbor.lng] === Infinity) {
+        if (closedSet.has(neighborKey)) {
           continue;
         }
 
         const neighborPos = toLatLng(neighbor);
-        const distance = getDistance(toLatLng(current.pos), neighborPos);
-        const timeCost = ((distance / speed[travelMode]) * 60 * grid[neighbor.lat][neighbor.lng]);
+        const distance = getDistance(
+          toLatLng(current.pos)[0],
+          toLatLng(current.pos)[1],
+          neighborPos[0],
+          neighborPos[1]
+        );
+        const timeCost = (distance / speed[travelMode]) * 60 * grid[neighbor.lat][neighbor.lng];
         const g = current.g + timeCost;
 
         const existingNeighbor = openSet.get(neighborKey);
         if (!existingNeighbor || g < existingNeighbor.g) {
-          const h = (getDistance(neighborPos, end) / speed[travelMode]) * 60;
+          const h = (getDistance(neighborPos[0], neighborPos[1], end[0], end[1]) / speed[travelMode]) * 60;
           openSet.set(neighborKey, {
             pos: neighbor,
             g: g,
@@ -990,79 +1019,177 @@ export default function Maps() {
     return path;
   };
 
-  // Function to calculate waypoints for secure route
-  const calculateSecureWaypoints = (start, end) => {
-    const secureWaypoints = [];
-    const safeAreas = [];
+  // Modified Dijkstra's Algorithm for Secure Route (Avoiding Danger Zones with Repulsion)
+  const secureRouteWithRepulsion = (start, end) => {
+    const gridSize = 0.005; // Approx 500m grid cells
+    const bounds = {
+      minLat: 12.8,
+      maxLat: 13.3,
+      minLng: 80.0,
+      maxLng: 80.4,
+    };
 
-    for (const category in chennaiLocations) {
-      for (const location in chennaiLocations[category]) {
-        const coords = chennaiLocations[category][location];
-        let isSafe = true;
+    const latCells = Math.ceil((bounds.maxLat - bounds.minLat) / gridSize);
+    const lngCells = Math.ceil((bounds.maxLng - bounds.minLng) / gridSize);
 
-        if (avoidHighCrime) {
-          for (const area of dangerAreas.highCrime) {
-            if (getDistance(coords, area.coords) < area.radius / 1000) {
-              isSafe = false;
-              break;
-            }
-          }
-          for (const area of dangerAreas.crimeLevels) {
-            if (area.crimeLevel >= 7 && getDistance(coords, area.center) < area.radius / 1000) {
-              isSafe = false;
-              break;
-            }
-          }
-        }
+    const toGridIndices = (coords) => {
+      const latIdx = Math.floor((coords[0] - bounds.minLat) / gridSize);
+      const lngIdx = Math.floor((coords[1] - bounds.minLng) / gridSize);
+      return {
+        lat: Math.max(0, Math.min(latCells - 1, latIdx)),
+        lng: Math.max(0, Math.min(lngCells - 1, lngIdx)),
+      };
+    };
 
-        if (isSafe && avoidFloodProne) {
-          for (const area of dangerAreas.floodProne) {
-            if (getDistance(coords, area.coords) < area.radius / 1000) {
-              isSafe = false;
-              break;
-            }
-          }
-        }
+    const toLatLng = (indices) => {
+      return [bounds.minLat + indices.lat * gridSize, bounds.minLng + indices.lng * gridSize];
+    };
 
-        if (isSafe && avoidHeavyTraffic) {
-          for (const area of dangerAreas.heavyTraffic) {
-            if (getDistance(coords, area.coords) < area.radius / 1000) {
-              isSafe = false;
-              break;
-            }
-          }
-        }
+    const startPos = toGridIndices(start);
+    const endPos = toGridIndices(end);
 
-        if (isSafe) safeAreas.push(location);
+    // Check if start or end points are in danger zones
+    if (isPointInDangerZone(start[0], start[1], avoidHighCrime, avoidFloodProne, avoidHeavyTraffic)) {
+      setRouteInfo('Error: Start location is in a danger zone.');
+      return [];
+    }
+    if (isPointInDangerZone(end[0], end[1], avoidHighCrime, avoidFloodProne, avoidHeavyTraffic)) {
+      setRouteInfo('Error: End location is in a danger zone.');
+      return [];
+    }
+
+    const posKey = (pos) => `${pos.lat},${pos.lng}`;
+    const distances = new Map();
+    const previous = new Map();
+    const unvisited = new Set();
+    const speed = { car: 40, walk: 5, bike: 15 }; // km/h
+
+    // Initialize distances and unvisited set
+    for (let lat = 0; lat < latCells; lat++) {
+      for (let lng = 0; lng < lngCells; lng++) {
+        const key = posKey({ lat, lng });
+        distances.set(key, Infinity);
+        unvisited.add(key);
       }
     }
 
-    const distancesFromStart = safeAreas.map((area) => {
-      const areaCoords = getCoordinates(area);
-      return {
-        name: area,
-        coords: areaCoords,
-        distanceFromStart: getDistance(start, areaCoords),
-        distanceToEnd: getDistance(areaCoords, end),
-      };
-    });
+    const startKey = posKey(startPos);
+    distances.set(startKey, 0);
 
-    distancesFromStart.sort((a, b) => {
-      const totalDistA = a.distanceFromStart + a.distanceToEnd;
-      const totalDistB = b.distanceFromStart + b.distanceToEnd;
-      return totalDistA - totalDistB;
-    });
+    const directions = [
+      { lat: -1, lng: -1 },
+      { lat: -1, lng: 0 },
+      { lat: -1, lng: 1 },
+      { lat: 0, lng: -1 },
+      { lat: 0, lng: 1 },
+      { lat: 1, lng: -1 },
+      { lat: 1, lng: 0 },
+      { lat: 1, lng: 1 },
+    ];
 
-    const directDistance = getDistance(start, end);
-    let numWaypoints = 1;
-    if (directDistance > 10) numWaypoints = 3;
-    else if (directDistance > 5) numWaypoints = 2;
+    while (unvisited.size > 0) {
+      // Find the unvisited node with the smallest distance
+      let currentKey = null;
+      let currentDist = Infinity;
+      for (const key of unvisited) {
+        const dist = distances.get(key);
+        if (dist < currentDist) {
+          currentDist = dist;
+          currentKey = key;
+        }
+      }
 
-    for (let i = 0; i < numWaypoints && i < distancesFromStart.length; i++) {
-      secureWaypoints.push(distancesFromStart[i].coords);
+      if (currentKey === null) break;
+
+      unvisited.delete(currentKey);
+      const [lat, lng] = currentKey.split(',').map(Number);
+      const currentPos = { lat, lng };
+
+      // Check if we've reached the end
+      if (currentPos.lat === endPos.lat && currentPos.lng === endPos.lng) {
+        break;
+      }
+
+      // Check neighbors
+      for (const dir of directions) {
+        const neighbor = {
+          lat: currentPos.lat + dir.lat,
+          lng: currentPos.lng + dir.lng,
+        };
+
+        if (
+          neighbor.lat < 0 ||
+          neighbor.lat >= latCells ||
+          neighbor.lng < 0 ||
+          neighbor.lng >= lngCells
+        ) {
+          continue;
+        }
+
+        const neighborKey = posKey(neighbor);
+        if (!unvisited.has(neighborKey)) {
+          continue;
+        }
+
+        const neighborPos = toLatLng(neighbor);
+
+        // Skip if the neighbor is in a danger zone
+        if (isPointInDangerZone(neighborPos[0], neighborPos[1], avoidHighCrime, avoidFloodProne, avoidHeavyTraffic)) {
+          continue;
+        }
+
+        // Calculate the base cost (time in minutes)
+        const distance = getDistance(
+          toLatLng(currentPos)[0],
+          toLatLng(currentPos)[1],
+          neighborPos[0],
+          neighborPos[1]
+        );
+        const timeCost = (distance / speed[travelMode]) * 60;
+
+        // Calculate the danger penalty based on proximity to danger zones
+        const minDistanceToDanger = getMinDistanceToDangerZone(
+          neighborPos[0],
+          neighborPos[1],
+          avoidHighCrime,
+          avoidFloodProne,
+          avoidHeavyTraffic
+        );
+        const dangerPenalty = minDistanceToDanger > 0 ? 1000 / (minDistanceToDanger + 1) : Infinity; // Inverse distance penalty
+        const totalCost = timeCost + dangerPenalty;
+
+        const newDistance = distances.get(currentKey) + totalCost;
+
+        if (newDistance < distances.get(neighborKey)) {
+          distances.set(neighborKey, newDistance);
+          previous.set(neighborKey, currentKey);
+        }
+      }
     }
 
-    return secureWaypoints;
+    // Reconstruct path
+    let path = [];
+    let currentKey = posKey(endPos);
+    if (distances.get(currentKey) === Infinity) {
+      setRouteInfo('No secure route found that avoids all danger zones.');
+      return [];
+    }
+
+    while (currentKey) {
+      const [lat, lng] = currentKey.split(',').map(Number);
+      path.unshift(toLatLng({ lat, lng }));
+      currentKey = previous.get(currentKey);
+    }
+
+    // Verify that the path does not pass through danger zones
+    for (const point of path) {
+      if (isPointInDangerZone(point[0], point[1], avoidHighCrime, avoidFloodProne, avoidHeavyTraffic)) {
+        setRouteInfo('Error: Generated secure route passes through a danger zone.');
+        return [];
+      }
+    }
+
+    return path;
   };
 
   // Function to get coordinates from location name
@@ -1101,25 +1228,35 @@ export default function Maps() {
     const startCoords = getCoordinates(startLocation);
     const endCoords = getCoordinates(endLocation);
 
-    const dangerPoints = [];
-    if (avoidHighCrime) dangerPoints.push(...dangerAreas.highCrime);
-    if (avoidFloodProne) dangerPoints.push(...dangerAreas.floodProne);
-    if (avoidHeavyTraffic) dangerPoints.push(...dangerAreas.heavyTraffic);
-
-    const path = aStarAlgorithm(startCoords, endCoords, dangerPoints);
-    setShortestRouteWaypoints(path);
-    setSecureRouteWaypoints([]); // Clear secure route
+    const path = aStarShortestRoute(startCoords, endCoords);
+    if (path.length > 0) {
+      setShortestRouteWaypoints(path);
+      setSecureRouteWaypoints([]); // Clear secure route
+      const totalDistance = path.reduce((acc, point, idx) => {
+        if (idx === 0) return acc;
+        return acc + getDistance(path[idx - 1][0], path[idx - 1][1], point[0], point[1]);
+      }, 0);
+      setRouteInfo(`Shortest route calculated. Distance: ${totalDistance.toFixed(2)} km`);
+    } else {
+      setRouteInfo('No shortest route found.');
+    }
   };
 
-  // Find secure route
+  // Find secure route using repulsion-based Dijkstra's algorithm
   const findSecureRoute = () => {
     const startCoords = getCoordinates(startLocation);
     const endCoords = getCoordinates(endLocation);
 
-    const secureWaypoints = calculateSecureWaypoints(startCoords, endCoords);
-    const waypoints = [startCoords, ...secureWaypoints, endCoords];
-    setSecureRouteWaypoints(waypoints);
-    setShortestRouteWaypoints([]); // Clear shortest route
+    const path = secureRouteWithRepulsion(startCoords, endCoords);
+    if (path.length > 0) {
+      setSecureRouteWaypoints(path);
+      setShortestRouteWaypoints([]); // Clear shortest route
+      const totalDistance = path.reduce((acc, point, idx) => {
+        if (idx === 0) return acc;
+        return acc + getDistance(path[idx - 1][0], path[idx - 1][1], point[0], point[1]);
+      }, 0);
+      setRouteInfo(`Secure route calculated. Distance: ${totalDistance.toFixed(2)} km`);
+    }
   };
 
   // Toggle traffic layer (mocked since OpenTraffic API is not available)
@@ -1564,129 +1701,161 @@ export default function Maps() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="flex flex-wrap gap-3 mb-4">
               <button
                 onClick={findShortestRoute}
-                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
+                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-white font-semibold transition-all"
               >
-                Shortest Route (A*)
+                Shortest Route
               </button>
               <button
                 onClick={findSecureRoute}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors shadow-md"
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-semibold transition-all"
               >
-                Secure Route
+                Safest Route
               </button>
+            </div>
+
+            <div className="flex flex-wrap gap-3 mb-4">
               <button
                 onClick={toggleTraffic}
-                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
+                className={`flex-1 px-4 py-2 rounded-lg text-white font-semibold transition-all ${
+                  trafficVisible ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-gray-600 hover:bg-gray-700'
+                }`}
               >
-                Toggle Traffic
+                {trafficVisible ? 'Hide Traffic' : 'Show Traffic'}
               </button>
               <button
                 onClick={exportRoute}
-                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-500 transition-colors shadow-md"
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white font-semibold transition-all"
               >
                 Export Route
               </button>
               <button
                 onClick={clearRoutes}
-                className="col-span-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors shadow-md"
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-semibold transition-all"
               >
                 Clear Routes
               </button>
             </div>
 
-            <div className="p-3 bg-gray-900/50 rounded-lg text-gray-300 text-sm">{routeInfo}</div>
+            <div className="mt-4 p-3 bg-gray-900/50 rounded-lg">
+              <h4 className="font-semibold text-gray-300 mb-1">Route Info:</h4>
+              <p className="text-sm text-gray-400">{routeInfo}</p>
+            </div>
 
-            <div className="mt-4 pt-3 border-t border-gray-600 text-gray-400 text-sm">
-              {weatherInfo}
+            <div className="mt-4 p-3 bg-gray-900/50 rounded-lg">
+              <h4 className="font-semibold text-gray-300 mb-1">Weather Info:</h4>
+              <p className="text-sm text-gray-400">{weatherInfo}</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Map Legend with Close Button */}
+      {/* Map Legend */}
       <AnimatePresence>
         {isLegendOpen && (
           <motion.div
-            className="fixed bottom-8 right-4 z-50 bg-white p-3 rounded-lg shadow-lg border border-gray-200 max-w-[200px]"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            className="fixed top-32 left-4 z-50 bg-gray-800/90 backdrop-blur-md p-4 rounded-lg shadow-xl border border-gray-600/50 w-full max-w-[250px] mx-4 sm:mx-0"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Close Button */}
-            <button
-              onClick={() => setIsLegendOpen(false)}
-              className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 transition-colors"
-              title="Close"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-bold text-white">Map Legend</h3>
+              <button
+                onClick={() => setIsLegendOpen(false)}
+                className="text-gray-400 hover:text-gray-200 transition-colors"
+                title="Close"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
-            <h4 className="text-sm font-bold mb-2 text-gray-800">Map Legend</h4>
-            <div className="flex items-center mb-1">
-              <span className="w-5 h-1 bg-blue-600 mr-2"></span>
-              <span className="text-gray-700 text-xs">Shortest Route (A*)</span>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div className="flex items-center mb-1">
-              <span className="w-5 h-1 bg-green-600 mr-2"></span>
-              <span className="text-gray-700 text-xs">Secure Route</span>
-            </div>
-            <div className="flex items-center mb-1">
-              <span className="w-3 h-3 rounded-full bg-red-400 mr-2"></span>
-              <span className="text-gray-700 text-xs">High Crime Area</span>
-            </div>
-            <div className="flex items-center mb-1">
-              <span className="w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
-              <span className="text-gray-700 text-xs">Flood-Prone Area</span>
-            </div>
-            <div className="flex items-center mb-1">
-              <span className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></span>
-              <span className="text-gray-700 text-xs">Heavy Traffic Area</span>
-            </div>
-            <div className="border-t border-gray-200 pt-2">
-              <h4 className="text-sm font-bold mb-2 text-gray-800">Crime Levels</h4>
-              <div className="flex items-center mb-1">
-              <span className="w-3 h-3 rounded-full bg-orange-500 mr-2"></span>
-                <span className="text-gray-700 text-xs">Moderate (1-3)</span>
-              </div>
-              <div className="flex items-center mb-1">
-                <span className="w-3 h-3 rounded-full bg-red-500 mr-2"></span>
-                <span className="text-gray-700 text-xs">High (4-6)</span>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-red-500 rounded-full"></div>
+                <span className="text-gray-300">Your Location</span>
               </div>
               <div className="flex items-center">
-                <span className="w-3 h-3 rounded-full bg-red-800 mr-2"></span>
-                <span className="text-gray-700 text-xs">Very High (7-10)</span>
+                <div className="w-4 h-4 mr-2 bg-green-500 rounded-full"></div>
+                <span className="text-gray-300">Start Point</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-blue-500 rounded-full"></div>
+                <span className="text-gray-300">End Point</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#FF6B6B] rounded-full"></div>
+                <span className="text-gray-300">High Crime Area</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#4D96FF] rounded-full"></div>
+                <span className="text-gray-300">Flood-Prone Area</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#FFD166] rounded-full"></div>
+                <span className="text-gray-300">Heavy Traffic Area</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#ff9800] rounded-full"></div>
+                <span className="text-gray-300">Crime Level: Moderate (1-3)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#f44336] rounded-full"></div>
+                <span className="text-gray-300">Crime Level: High (4-6)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#b71c1c] rounded-full"></div>
+                <span className="text-gray-300">Crime Level: Very High (7-10)</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#0078A8] rounded-full"></div>
+                <span className="text-gray-300">Shortest Route</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 mr-2 bg-[#4CAF50] rounded-full"></div>
+                <span className="text-gray-300">Safest Route</span>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Status Message Overlay */}
-      {statusMessage && (
-        <motion.div
-          className={`fixed top-32 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-white text-sm font-semibold ${
-            messageType === 'danger' ? 'bg-red-600' : 'bg-green-600'
-          }`}
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.3 }}
+      {/* Button to Toggle Legend */}
+      {!isLegendOpen && (
+        <button
+          onClick={() => setIsLegendOpen(true)}
+          className="fixed top-32 left-4 z-50 px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-full text-white font-semibold transition-all shadow-lg"
         >
-          {statusMessage}
-        </motion.div>
+          Show Legend
+        </button>
       )}
+
+      {/* Status Message (e.g., for location updates or errors) */}
+      <AnimatePresence>
+        {statusMessage && (
+          <motion.div
+            className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-white font-semibold ${
+              messageType === 'safe' ? 'bg-green-600' : 'bg-red-600'
+            }`}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {statusMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* SOS Alert Component */}
       <SosAlert />
